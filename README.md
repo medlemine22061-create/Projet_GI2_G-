@@ -115,10 +115,5 @@ src/
 
 ---
 
-## 📌 Conclusion
-Ce projet combine **informatique, mathématiques et innovation médicale** pour proposer une solution moderne à un problème critique de santé publique.
 
----
-
-✨ *Projet d’année — CY Tech ING1 (2025-2026)*
 
