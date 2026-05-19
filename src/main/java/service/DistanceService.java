@@ -6,22 +6,9 @@ public class DistanceService {
 
     public double calculateDistance(Point2D a, Point2D b) {
 
-        double dx = b.getX() - a.getX();
-
-        double dy = b.getY() - a.getY();
+        double dx = a.getX() - b.getX();
+        double dy = a.getY() - b.getY();
 
         return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    public double calculateTravelTime(
-            double distance,
-            double droneSpeed
-    ) {
-
-        if (droneSpeed <= 0) {
-            return 0;
-        }
-
-        return distance / droneSpeed;
     }
 }

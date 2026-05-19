@@ -1,53 +1,20 @@
 package model;
 
-public class Hospital extends MapElement {
+public class Hospital {
 
-    private boolean hasAvailableOrgan;
-    private OrganType availableOrganType;
+    private String name;
+    private Point2D position;
 
-    public Hospital(
-            int id,
-            String name,
-            Point2D position,
-            boolean hasAvailableOrgan,
-            OrganType availableOrganType
-    ) {
-
-        super(id, name, position);
-
-        this.hasAvailableOrgan = hasAvailableOrgan;
-        this.availableOrganType = availableOrganType;
+    public Hospital(String name, Point2D position) {
+        this.name = name;
+        this.position = position;
     }
 
-    public boolean hasAvailableOrgan() {
-        return hasAvailableOrgan;
+    public String getName() {
+        return name;
     }
 
-    public void setHasAvailableOrgan(boolean hasAvailableOrgan) {
-        this.hasAvailableOrgan = hasAvailableOrgan;
-    }
-
-    public OrganType getAvailableOrganType() {
-        return availableOrganType;
-    }
-
-    public void setAvailableOrganType(OrganType availableOrganType) {
-        this.availableOrganType = availableOrganType;
-    }
-
-    public boolean canProvideOrgan(OrganType requestedType) {
-
-        return hasAvailableOrgan &&
-                availableOrganType == requestedType;
-    }
-
-    @Override
-    public String toString() {
-
-        return "Hospital{" +
-                "name='" + getName() + '\'' +
-                ", hasAvailableOrgan=" + hasAvailableOrgan +
-                ", availableOrganType=" + availableOrganType +
-                '}';
+    public Point2D getPosition() {
+        return position;
     }
 }
