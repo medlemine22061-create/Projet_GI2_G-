@@ -62,6 +62,12 @@ Ces outils permettent d’optimiser les trajets et d’organiser efficacement l�
 
 ---
 
+## Diagrammes UML
+
+![Use Case](images/uml_use_case_organdrone.png)
+
+---
+
 ## 📊 Statistiques prévues
 
 Pour chaque zone Voronoï, l’application pourra afficher :
