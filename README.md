@@ -62,11 +62,6 @@ Ces outils permettent d’optimiser les trajets et d’organiser efficacement l�
 
 ---
 
-## Diagrammes UML
-
-![Use Case](images/uml_use_case_organdrone.png)
-
----
 
 ## 📊 Statistiques prévues
 
@@ -112,12 +107,16 @@ Projet réalisé par un groupe de 4 étudiants en ING1 (CY Tech).
 
 ```text
 src/
- ├── app/
- ├── model/
- ├── service/
- ├── ui/
- ├── io/
- └── util/
+ └── main/
+    └── java/
+        ├── app/
+        ├── model/
+        ├── service/
+        └── ui/
+ 
+ 
+
+
 
 ---
 
