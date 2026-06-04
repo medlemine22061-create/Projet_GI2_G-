@@ -1,10 +1,10 @@
 package service;
 
-import model.Point2D;
+import model.Position;
 
 public class DistanceService {
 
-    public double calculateDistance(Point2D a, Point2D b) {
+    public double calculateDistance(Position a, Position b) {
 
         double dx = a.getX() - b.getX();
         double dy = a.getY() - b.getY();
