@@ -11,7 +11,7 @@ public class MainApp extends Application {
     @Override
     public void start(Stage stage) {
 
-        MapData mapData = new MapData();
+        MapModel mapData = new MapModel();
 
         DroneBase baseA =
                 new DroneBase(

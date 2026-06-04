@@ -1,11 +1,11 @@
 package ui;
 
 import javafx.scene.layout.BorderPane;
-import model.MapData;
+import model.MapModel;
 
 public class MainWindow extends BorderPane {
 
-    public MainWindow(MapData mapData) {
+    public MainWindow(MapModel mapData) {
 
         MapCanvas canvas = new MapCanvas(mapData);
 

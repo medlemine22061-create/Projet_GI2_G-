@@ -7,9 +7,9 @@ import model.*;
 
 public class MapCanvas extends Canvas {
 
-    private MapData mapData;
+    private MapModel mapData;
 
-    public MapCanvas(MapData mapData) {
+    public MapCanvas(MapModel mapData) {
 
         super(800, 700);
 
