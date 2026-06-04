@@ -5,7 +5,7 @@ import java.util.Objects;
 
 /**
  * Abstract parent class for medical sites displayed on the map.
- * A medical site can be a hospital or a collection center.
+ * A medical site can be a hospital or a collection center
  */
 public abstract class MedicalSite implements Serializable {
 
