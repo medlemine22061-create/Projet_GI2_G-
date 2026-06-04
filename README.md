@@ -106,13 +106,37 @@ Projet réalisé par un groupe de 4 étudiants en ING1 (CY Tech).
 ## 🗂️ Organisation du code
 
 ```text
-src/
- └── main/
-    └── java/
-        ├── app/
-        ├── model/
-        ├── service/
-        └── ui/
+src/main/java/
+│
+├── app/
+│   └── Main.java
+│
+├── model/
+│   ├── Position.java
+│   ├── MedicalSite.java
+│   ├── Hospital.java
+│   ├── CollectionCenter.java
+│   ├── MedicalStaff.java
+│   ├── Drone.java
+│   ├── DroneBase.java
+│   ├── Route.java
+│   ├── Mission.java
+│   ├── DeliveryRequest.java
+│   ├── MapModel.java
+│   ├── VoronoiDiagram.java
+│   ├── VoronoiCell.java
+│   ├── DelaunayTriangulation.java
+│   └── Triangle.java
+│
+├── model/enums/
+│   ├── PriorityLevel.java
+│   ├── RequestStatus.java
+│   ├── DroneStatus.java
+│   └── MissionStatus.java
+│
+└── service/
+    ├── OptimizationService.java
+    └── ImportExportService.java
  
  
 
