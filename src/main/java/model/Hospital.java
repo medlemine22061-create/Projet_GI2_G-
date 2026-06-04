@@ -3,9 +3,9 @@ package model;
 public class Hospital {
 
     private String name;
-    private Point2D position;
+    private Position position;
 
-    public Hospital(String name, Point2D position) {
+    public Hospital(String name, Position position) {
         this.name = name;
         this.position = position;
     }
@@ -14,7 +14,7 @@ public class Hospital {
         return name;
     }
 
-    public Point2D getPosition() {
+    public Position getPosition() {
         return position;
     }
 }

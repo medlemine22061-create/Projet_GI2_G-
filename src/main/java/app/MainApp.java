@@ -16,13 +16,13 @@ public class MainApp extends Application {
         DroneBase baseA =
                 new DroneBase(
                         "Drone Base A",
-                        new Point2D(150, 150)
+                        new Position(150, 150)
                 );
 
         Hospital hospitalA =
                 new Hospital(
                         "Hospital A",
-                        new Point2D(400, 300)
+                        new Position(400, 300)
                 );
 
         mapData.getDroneBases().add(baseA);
