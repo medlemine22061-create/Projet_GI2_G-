@@ -3,9 +3,9 @@ package model;
 public class DroneBase {
 
     private String name;
-    private Position position;
+    private Point2D position;
 
-    public DroneBase(String name, Position position) {
+    public DroneBase(String name, Point2D position) {
         this.name = name;
         this.position = position;
     }
@@ -14,7 +14,7 @@ public class DroneBase {
         return name;
     }
 
-    public Position getPosition() {
+    public Point2D getPosition() {
         return position;
     }
 }
