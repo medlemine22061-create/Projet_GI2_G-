@@ -26,27 +26,27 @@ public class Main {
             Hospital hospital = new Hospital(
                     "H1",
                     "Hospital A",
-                    new Position(10, 10),
+                    new Point2D(10, 10),
                     true
             );
 
             CollectionCenter center = new CollectionCenter(
                     "C1",
                     "Collection Center A",
-                    new Position(0, 0),
+                    new Point2D(0, 0),
                     List.of("heart", "kidney")
             );
 
             DroneBase base = new DroneBase(
                     "B1",
                     "Drone Base A",
-                    new Position(1, 1),
+                    new Point2D(1, 1),
                     5
             );
 
             Drone drone = new Drone(
                     "D1",
-                    new Position(1, 1),
+                    new Point2D(1, 1),
                     100.0,
                     5.0
             );
@@ -85,7 +85,7 @@ public class Main {
             mission.start();
 
             mission.updateTracking(
-                    new Position(5, 5),
+                    new Point2D(5, 5),
                     85.0,
                     4.0,
                     0.1
