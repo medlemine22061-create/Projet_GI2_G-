@@ -47,7 +47,7 @@ public class VoronoiDiagram implements Serializable {
      * @param position target position
      * @return nearest medical site, or null if the diagram is empty
      */
-    public MedicalSite getNearestSite(Point2D position) {
+    public MedicalSite getNearestSite(Position position) {
         Objects.requireNonNull(position, "position cannot be null");
 
         MedicalSite nearestSite = null;
