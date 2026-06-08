@@ -24,7 +24,7 @@ public class Mission implements Serializable {
     private LocalDateTime startTime;
     private LocalDateTime arrivalTime;
     private MissionStatus status;
-    private Point2D currentPosition;
+    private Position currentPosition;
     private double batteryLevel;
     private double organTemperature;
     private double shockLevel;
@@ -76,7 +76,7 @@ public class Mission implements Serializable {
         addHistoryEvent("Reception confirmed by " + staff.getFullName());
     }
 
-    public void updateTracking(Point2D position, double batteryLevel,
+    public void updateTracking(Position position, double batteryLevel,
                                double organTemperature, double shockLevel) {
         this.currentPosition = Objects.requireNonNull(position, "position cannot be null");
         this.batteryLevel = batteryLevel;

@@ -50,7 +50,7 @@ public class Triangle implements Serializable {
      *
      * @return approximate circumcenter
      */
-    public Point2D getCircumcenter() {
+    public Position getCircumcenter() {
         double x = (
                 siteA.getPosition().getX()
                         + siteB.getPosition().getX()
@@ -63,7 +63,7 @@ public class Triangle implements Serializable {
                         + siteC.getPosition().getY()
         ) / 3.0;
 
-        return new Point2D(x, y);
+        return new Position(x, y);
     }
 
     /**
