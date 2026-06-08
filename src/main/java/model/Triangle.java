@@ -33,9 +33,9 @@ public class Triangle implements Serializable {
      * @return triangle surface
      */
     public double computeSurface() {
-        Point2D a = siteA.getPosition();
-        Point2D b = siteB.getPosition();
-        Point2D c = siteC.getPosition();
+        Position a = siteA.getPosition();
+        Position b = siteB.getPosition();
+        Position c = siteC.getPosition();
 
         return Math.abs(
                 a.getX() * (b.getY() - c.getY())

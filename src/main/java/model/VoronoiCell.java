@@ -14,7 +14,7 @@ public class VoronoiCell implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private final MedicalSite owner;
-    private final List<Point2D> vertices;
+    private final List<Position> vertices;
     private int numberOfMissions;
 
     /**
@@ -33,7 +33,7 @@ public class VoronoiCell implements Serializable {
      *
      * @param position vertex position
      */
-    public void addVertex(Point2D position) {
+    public void addVertex(Position position) {
         vertices.add(Objects.requireNonNull(position, "position cannot be null"));
     }
 
@@ -45,7 +45,7 @@ public class VoronoiCell implements Serializable {
      * @param position position to test
      * @return true if the position is considered inside the cell
      */
-    public boolean contains(Point2D position) {
+    public boolean contains(Position position) {
         return position != null && !vertices.isEmpty();
     }
 
@@ -62,8 +62,8 @@ public class VoronoiCell implements Serializable {
         double sum = 0.0;
 
         for (int i = 0; i < vertices.size(); i++) {
-            Point2D current = vertices.get(i);
-            Point2D next = vertices.get((i + 1) % vertices.size());
+            Position current = vertices.get(i);
+            Position next = vertices.get((i + 1) % vertices.size());
 
             sum += current.getX() * next.getY();
             sum -= next.getX() * current.getY();
@@ -108,7 +108,7 @@ public class VoronoiCell implements Serializable {
      *
      * @return copy of the vertices list
      */
-    public List<Point2D> getVertices() {
+    public List<Position> getVertices() {
         return new ArrayList<>(vertices);
     }
 
