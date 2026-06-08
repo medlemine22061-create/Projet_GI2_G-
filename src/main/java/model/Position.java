@@ -6,7 +6,7 @@ import java.util.Objects;
 /**
  * Represents a two-dimensional position on the map.
  */
-public class Point2D implements Serializable {
+public class Position implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -19,7 +19,7 @@ public class Point2D implements Serializable {
      * @param x horizontal coordinate
      * @param y vertical coordinate
      */
-    public Point2D(double x, double y) {
+    public Position(double x, double y) {
         this.x = x;
         this.y = y;
     }
@@ -30,7 +30,7 @@ public class Point2D implements Serializable {
      * @param position target position
      * @return distance between the two positions
      */
-    public double distanceTo(Point2D position) {
+    public double distanceTo(Position position) {
         Objects.requireNonNull(position, "position cannot be null");
 
         double dx = x - position.x;
