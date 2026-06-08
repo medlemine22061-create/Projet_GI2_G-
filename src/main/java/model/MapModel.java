@@ -36,7 +36,7 @@ public class MapModel implements Serializable {
         updateDiagrams();
     }
 
-    public void moveMedicalSite(MedicalSite site, Point2D position) {
+    public void moveMedicalSite(MedicalSite site, Position position) {
         Objects.requireNonNull(site, "site cannot be null");
         site.updatePosition(position);
         updateDiagrams();
