@@ -27,14 +27,16 @@ public class Position implements Serializable {
     /**
      * Computes the Euclidean distance to another position.
      *
-     * @param position target position
+     * @param other target position
      * @return distance between the two positions
      */
-    public double distanceTo(Position position) {
-        Objects.requireNonNull(position, "position cannot be null");
+    public double distanceTo(Position other) {
+        if (other == null) {
+            throw new IllegalArgumentException("other cannot be null");
+        }
 
-        double dx = x - position.x;
-        double dy = y - position.y;
+        double dx = this.x - other.x;
+        double dy = this.y - other.y;
 
         return Math.sqrt(dx * dx + dy * dy);
     }
@@ -59,4 +61,5 @@ public class Position implements Serializable {
     public String toString() {
         return "(" + x + ", " + y + ")";
     }
+
 }
