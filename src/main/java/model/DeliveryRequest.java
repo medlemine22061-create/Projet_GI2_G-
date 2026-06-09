@@ -1,7 +1,7 @@
 package model;
 
-import fr.cytech.organdrone.model.enums.PriorityLevel;
-import fr.cytech.organdrone.model.enums.RequestStatus;
+import model.enums.PriorityLevel;
+import model.enums.RequestStatus;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
