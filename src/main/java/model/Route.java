@@ -6,22 +6,15 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Represents a route between a collection center and a hospital.
+ * Represents the route followed by a drone.
  */
 public class Route implements Serializable {
-
     private static final long serialVersionUID = 1L;
 
     private final CollectionCenter origin;
     private final Hospital destination;
     private final List<Position> waypoints;
 
-    /**
-     * Creates a route.
-     *
-     * @param origin origin collection center
-     * @param destination destination hospital
-     */
     public Route(CollectionCenter origin, Hospital destination) {
         this.origin = Objects.requireNonNull(origin, "origin cannot be null");
         this.destination = Objects.requireNonNull(destination, "destination cannot be null");
@@ -29,7 +22,9 @@ public class Route implements Serializable {
     }
 
     public void addWaypoint(Position position) {
-        waypoints.add(Objects.requireNonNull(position, "position cannot be null"));
+        if (position != null) {
+            waypoints.add(position);
+        }
     }
 
     public void removeWaypoint(Position position) {
@@ -38,14 +33,16 @@ public class Route implements Serializable {
 
     public double computeDistance() {
         double distance = 0.0;
-        Position previous = origin.getPosition();
+
+        Position current = origin.getPosition();
 
         for (Position waypoint : waypoints) {
-            distance += previous.distanceTo(waypoint);
-            previous = waypoint;
+            distance += current.distanceTo(waypoint);
+            current = waypoint;
         }
 
-        distance += previous.distanceTo(destination.getPosition());
+        distance += current.distanceTo(destination.getPosition());
+
         return distance;
     }
 
@@ -67,5 +64,16 @@ public class Route implements Serializable {
 
     public List<Position> getWaypoints() {
         return new ArrayList<>(waypoints);
+    }
+
+    @Override
+    public String toString() {
+        return "Route{origin="
+                + origin.getName()
+                + ", destination="
+                + destination.getName()
+                + ", distance="
+                + computeDistance()
+                + "}";
     }
 }

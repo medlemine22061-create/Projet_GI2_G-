@@ -1,34 +1,36 @@
 package service;
 
+import model.CollectionCenter;
+import model.DelaunayTriangulation;
 import model.DeliveryRequest;
 import model.Drone;
 import model.Hospital;
-import model.CollectionCenter;
+import model.MedicalSite;
 import model.Mission;
-import model.Position;
 import model.Route;
+import model.Triangle;
 import model.enums.DroneStatus;
-import model.enums.RequestStatus;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
 
 /**
- * Service responsible for drone assignment and route computation.
+ * Service responsible for route computation, drone selection and mission creation.
  */
 public class OptimizationService {
 
+    private final DelaunayTriangulation delaunayTriangulation;
+
+    public OptimizationService(DelaunayTriangulation delaunayTriangulation) {
+        this.delaunayTriangulation = delaunayTriangulation;
+    }
+
     /**
-     * Finds the nearest available drone from the origin collection center.
-     *
-     * @param drones list of drones
-     * @param origin collection center
-     * @return nearest available drone, or null if none is available
+     * Finds the nearest available drone from the collection center.
      */
     public Drone findNearestAvailableDrone(List<Drone> drones, CollectionCenter origin) {
-        Objects.requireNonNull(origin, "origin cannot be null");
-
-        if (drones == null || drones.isEmpty()) {
+        if (drones == null || origin == null) {
             return null;
         }
 
@@ -36,13 +38,15 @@ public class OptimizationService {
         double bestDistance = Double.MAX_VALUE;
 
         for (Drone drone : drones) {
-            if (drone.isAvailable()) {
-                double distance = drone.getPosition().distanceTo(origin.getPosition());
+            if (!drone.isAvailable()) {
+                continue;
+            }
 
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    bestDrone = drone;
-                }
+            double distance = drone.getPosition().distanceTo(origin.getPosition());
+
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestDrone = drone;
             }
         }
 
@@ -50,70 +54,105 @@ public class OptimizationService {
     }
 
     /**
-     * Computes a simple route between an origin and a destination.
+     * Computes a route between a collection center and a hospital.
      *
-     * @param origin collection center
-     * @param destination destination hospital
-     * @return computed route
+     * The method uses Delaunay triangles in a simplified way:
+     * if a triangle connects the origin and the destination, the third point
+     * can be used as an intermediate waypoint.
      */
     public Route computeOptimalRoute(CollectionCenter origin, Hospital destination) {
-        return new Route(origin, destination);
+        if (origin == null || destination == null) {
+            throw new IllegalArgumentException("origin and destination cannot be null");
+        }
+
+        Route route = new Route(origin, destination);
+
+        if (delaunayTriangulation == null) {
+            return route;
+        }
+
+        List<Triangle> triangles = delaunayTriangulation.getTriangles();
+
+        for (Triangle triangle : triangles) {
+            boolean containsOrigin = triangle.containsSite(origin);
+            boolean containsDestination = triangle.containsSite(destination);
+
+            if (containsOrigin && containsDestination) {
+                MedicalSite waypointSite = findThirdSite(triangle, origin, destination);
+
+                if (waypointSite != null) {
+                    route.addWaypoint(waypointSite.getPosition());
+                }
+
+                return route;
+            }
+        }
+
+        return route;
+    }
+
+    private MedicalSite findThirdSite(Triangle triangle, MedicalSite first, MedicalSite second) {
+        for (MedicalSite site : triangle.getSites()) {
+            if (!site.equals(first) && !site.equals(second)) {
+                return site;
+            }
+        }
+
+        return null;
     }
 
     /**
-     * Selects the best drone that can complete the route.
+     * Selects the best drone for a given route.
      *
-     * @param drones list of drones
-     * @param route route to complete
-     * @return selected drone, or null
+     * Score = distance from drone to origin + route distance.
      */
     public Drone selectBestDrone(List<Drone> drones, Route route) {
         if (drones == null || route == null) {
             return null;
         }
 
-        Drone bestDrone = null;
-        double bestDistance = Double.MAX_VALUE;
-        Position originPosition = route.getOrigin().getPosition();
+        List<Drone> candidates = new ArrayList<>();
 
         for (Drone drone : drones) {
             if (drone.isAvailable() && drone.canDoMission(route)) {
-                double distance = drone.getPosition().distanceTo(originPosition);
-
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    bestDrone = drone;
-                }
+                candidates.add(drone);
             }
         }
 
-        return bestDrone;
+        return candidates.stream()
+                .min(Comparator.comparingDouble(drone ->
+                        drone.getPosition().distanceTo(route.getOrigin().getPosition())
+                                + route.computeDistance()
+                ))
+                .orElse(null);
     }
 
     /**
      * Creates a mission from a delivery request.
-     *
-     * @param request delivery request
-     * @param drones available drones
-     * @return created mission
      */
     public Mission createMission(DeliveryRequest request, List<Drone> drones) {
-        Objects.requireNonNull(request, "request cannot be null");
-
-        if (request.getStatus() == RequestStatus.PENDING && !request.validate()) {
-            throw new IllegalStateException("Request cannot be validated");
+        if (request == null) {
+            throw new IllegalArgumentException("request cannot be null");
         }
 
-        Route route = computeOptimalRoute(request.getOrigin(), request.getDestination());
+        request.validate();
+
+        Route route = computeOptimalRoute(
+                request.getOrigin(),
+                request.getDestination()
+        );
+
         Drone drone = selectBestDrone(drones, route);
 
         if (drone == null) {
-            throw new IllegalStateException("No available drone can do this mission");
+            throw new IllegalStateException("No available drone can complete this mission");
         }
 
         drone.setStatus(DroneStatus.IN_MISSION);
-        request.updateStatus(RequestStatus.ASSIGNED);
 
-        return new Mission("MIS-" + System.currentTimeMillis(), request, drone, route);
+        Mission mission = new Mission(request, drone, route);
+        mission.addHistoryEvent("Mission created with drone " + drone.getId());
+
+        return mission;
     }
 }

@@ -1,122 +1,121 @@
 package model;
 
-
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 /**
- * Represents a Voronoi cell owned by a medical site.
+ * Represents one simplified Voronoi cell.
+ *
+ * A cell belongs to one medical site and contains the grid points that are
+ * closer to this site than to the other sites.
  */
 public class VoronoiCell implements Serializable {
-
     private static final long serialVersionUID = 1L;
 
     private final MedicalSite owner;
-    private final List<Position> vertices;
+    private final List<Position> points;
+    private double surface;
+    private double density;
     private int numberOfMissions;
 
-    /**
-     * Creates a Voronoi cell.
-     *
-     * @param owner medical site that owns the cell
-     */
     public VoronoiCell(MedicalSite owner) {
         this.owner = Objects.requireNonNull(owner, "owner cannot be null");
-        this.vertices = new ArrayList<>();
+        this.points = new ArrayList<>();
+        this.surface = 0.0;
+        this.density = 0.0;
         this.numberOfMissions = 0;
     }
 
+    public void addPoint(Position position) {
+        if (position != null) {
+            points.add(position);
+        }
+    }
+
     /**
-     * Adds a vertex to the cell.
-     *
-     * @param position vertex position
+     * Alias kept if your old code uses addVertex().
      */
     public void addVertex(Position position) {
-        vertices.add(Objects.requireNonNull(position, "position cannot be null"));
+        addPoint(position);
     }
 
     /**
-     * Checks if a position belongs to the cell.
-     * This simplified version only checks that the position is not null and that the cell has vertices.
-     * A real geometric test can be implemented later.
+     * Simplified contains method.
      *
-     * @param position position to test
-     * @return true if the position is considered inside the cell
+     * Since the cell is approximated by grid points, this method checks if the
+     * tested position is close to one of the points of the cell.
      */
     public boolean contains(Position position) {
-        return position != null && !vertices.isEmpty();
+        if (position == null) {
+            return false;
+        }
+
+        for (Position point : points) {
+            if (point.distanceTo(position) < 1.0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
-     * Computes the surface of the cell using the polygon shoelace formula.
+     * Computes an approximated surface.
      *
-     * @return surface of the cell
+     * Each grid point represents approximately a square of size step x step.
+     */
+    public double computeSurface(double step) {
+        this.surface = points.size() * step * step;
+        return surface;
+    }
+
+    /**
+     * Default version if the step is not provided.
      */
     public double computeSurface() {
-        if (vertices.size() < 3) {
-            return 0.0;
-        }
-
-        double sum = 0.0;
-
-        for (int i = 0; i < vertices.size(); i++) {
-            Position current = vertices.get(i);
-            Position next = vertices.get((i + 1) % vertices.size());
-
-            sum += current.getX() * next.getY();
-            sum -= next.getX() * current.getY();
-        }
-
-        return Math.abs(sum) / 2.0;
+        return surface;
     }
 
-    /**
-     * Computes the mission density in this cell.
-     *
-     * @return number of missions divided by the cell surface
-     */
     public double computeDensity() {
-        double surface = computeSurface();
-
-        if (surface == 0.0) {
-            return 0.0;
+        if (surface <= 0) {
+            density = 0.0;
+        } else {
+            density = numberOfMissions / surface;
         }
 
-        return numberOfMissions / surface;
+        return density;
     }
 
-    /**
-     * Increments the number of missions associated with this cell.
-     */
     public void incrementMissionCount() {
         numberOfMissions++;
+        computeDensity();
     }
 
-    /**
-     * Returns the medical site that owns this cell.
-     *
-     * @return owner medical site
-     */
     public MedicalSite getOwner() {
         return owner;
     }
 
-    /**
-     * Returns the vertices of the cell.
-     *
-     * @return copy of the vertices list
-     */
-    public List<Position> getVertices() {
-        return new ArrayList<>(vertices);
+    public List<Position> getPoints() {
+        return new ArrayList<>(points);
     }
 
     /**
-     * Returns the number of missions associated with this cell.
-     *
-     * @return number of missions
+     * Alias kept if your old code uses getVertices().
      */
+    public List<Position> getVertices() {
+        return getPoints();
+    }
+
+    public double getSurface() {
+        return surface;
+    }
+
+    public double getDensity() {
+        return density;
+    }
+
     public int getNumberOfMissions() {
         return numberOfMissions;
     }
