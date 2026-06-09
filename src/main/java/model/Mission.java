@@ -32,16 +32,14 @@ public class Mission implements Serializable {
     private MedicalStaff receivedBy;
     private final List<String> history;
 
-    public Mission(String id, DeliveryRequest request, Drone drone, Route route) {
-        this.id = MedicalSite.requireText(id, "id");
+    public Mission(DeliveryRequest request, Drone drone, Route route) {
+        this.id = "M-" + System.currentTimeMillis();
         this.request = Objects.requireNonNull(request, "request cannot be null");
         this.drone = Objects.requireNonNull(drone, "drone cannot be null");
         this.route = Objects.requireNonNull(route, "route cannot be null");
         this.status = MissionStatus.CREATED;
-        this.currentPosition = route.getOrigin().getPosition();
+        this.currentPosition = drone.getPosition();
         this.batteryLevel = drone.getBatteryLevel();
-        this.organTemperature = 4.0;
-        this.shockLevel = 0.0;
         this.receptionConfirmed = false;
         this.history = new ArrayList<>();
         addHistoryEvent("Mission created");

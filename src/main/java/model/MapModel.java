@@ -7,14 +7,15 @@ import java.util.Objects;
 
 /**
  * Central model of the application map.
+ * It stores medical sites, drone bases, drones, and spatial structures.
  */
 public class MapModel implements Serializable {
-
     private static final long serialVersionUID = 1L;
 
     private final List<MedicalSite> medicalSites;
     private final List<DroneBase> droneBases;
     private final List<Drone> drones;
+
     private final VoronoiDiagram voronoiDiagram;
     private final DelaunayTriangulation delaunayTriangulation;
 
@@ -36,9 +37,9 @@ public class MapModel implements Serializable {
         updateDiagrams();
     }
 
-    public void moveMedicalSite(MedicalSite site, Position position) {
+    public void moveMedicalSite(MedicalSite site, Position newPosition) {
         Objects.requireNonNull(site, "site cannot be null");
-        site.updatePosition(position);
+        site.updatePosition(newPosition);
         updateDiagrams();
     }
 
@@ -58,6 +59,9 @@ public class MapModel implements Serializable {
         drones.remove(drone);
     }
 
+    /**
+     * Recomputes Voronoi and Delaunay structures after map modifications.
+     */
     public void updateDiagrams() {
         voronoiDiagram.compute(medicalSites);
         delaunayTriangulation.compute(medicalSites);

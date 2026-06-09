@@ -50,10 +50,11 @@ public class Route implements Serializable {
     }
 
     public double estimateTime(Drone drone) {
-        Objects.requireNonNull(drone, "drone cannot be null");
+        if (drone == null || drone.getSpeed() <= 0) {
+            return 0.0;
+        }
 
-        double assumedSpeed = 1.0;
-        return computeDistance() / assumedSpeed;
+        return computeDistance() / drone.getSpeed();
     }
 
     public CollectionCenter getOrigin() {

@@ -8,6 +8,7 @@ public class Drone implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
+    private double speed;
     private final String id;
     private double autonomy;
     private double batteryLevel;
@@ -22,18 +23,15 @@ public class Drone implements Serializable {
      * @param position current position
      * @param autonomy maximum distance the drone can fly when fully charged
      * @param maxPayload maximum payload
+     * @param speed the speed of the Drone
      */
-    public Drone(String id, Position position, double autonomy, double maxPayload) {
-        this.id = MedicalSite.requireText(id, "id");
-        this.position = Objects.requireNonNull(position, "position cannot be null");
-
-        if (autonomy < 0 || maxPayload < 0) {
-            throw new IllegalArgumentException("autonomy and maxPayload cannot be negative");
-        }
-
+    public Drone(String id, double autonomy, double batteryLevel, double maxPayload, double speed, Position position) {
+        this.id = Objects.requireNonNull(id, "id cannot be null");
         this.autonomy = autonomy;
+        this.batteryLevel = batteryLevel;
         this.maxPayload = maxPayload;
-        this.batteryLevel = 100.0;
+        this.speed = speed;
+        this.position = Objects.requireNonNull(position, "position cannot be null");
         this.status = DroneStatus.AVAILABLE;
     }
 
@@ -88,5 +86,17 @@ public class Drone implements Serializable {
 
     public void setStatus(DroneStatus status) {
         this.status = Objects.requireNonNull(status, "status cannot be null");
+    }
+
+    public double getSpeed() {
+        return speed;
+    }
+
+    public void setSpeed(double speed) {
+        if (speed <= 0) {
+            throw new IllegalArgumentException("speed must be positive");
+        }
+
+        this.speed = speed;
     }
 }
