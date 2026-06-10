@@ -1,7 +1,6 @@
 package model;
 
-import fr.cytech.organdrone.model.enums.PriorityLevel;
-
+import model.enums.PriorityLevel;
 import java.io.Serializable;
 import java.util.Objects;
 

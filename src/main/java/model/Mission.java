@@ -1,5 +1,6 @@
 package model;
 
+import model.enums.PriorityLevel;
 
 import model.enums.DroneStatus;
 import model.enums.MissionStatus;
@@ -126,5 +127,13 @@ public class Mission implements Serializable {
 
     public List<String> getHistory() {
         return new ArrayList<>(history);
+    }
+
+    public Position getCurrentPosition() {
+        return currentPosition;
+    }
+
+    public double getBatteryLevel() {
+        return batteryLevel;
     }
 }
