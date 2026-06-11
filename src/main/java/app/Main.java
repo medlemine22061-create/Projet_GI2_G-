@@ -122,7 +122,7 @@ public class Main {
         Mission mission = optimizationService.createMission(request, map.getDrones());
 
         System.out.println("\nMission created:");
-        System.out.println("Mission id: " + mission.getId());
+        Syst
         System.out.println("Drone: " + mission.getDrone().getId());
         System.out.println("Route distance: " + mission.getRoute().computeDistance());
 
