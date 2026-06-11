@@ -1,9 +1,9 @@
 package model;
 
+import model.enums.PriorityLevel;
 
 import model.enums.DroneStatus;
 import model.enums.MissionStatus;
-import model.enums.PriorityLevel;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
@@ -18,7 +18,7 @@ public class Mission implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    
+    private final String id;
     private final DeliveryRequest request;
     private final Drone drone;
     private final Route route;
@@ -34,14 +34,13 @@ public class Mission implements Serializable {
     private final List<String> history;
 
     public Mission(DeliveryRequest request, Drone drone, Route route) {
+        this.id = "M-" + System.currentTimeMillis();
         this.request = Objects.requireNonNull(request, "request cannot be null");
         this.drone = Objects.requireNonNull(drone, "drone cannot be null");
         this.route = Objects.requireNonNull(route, "route cannot be null");
         this.status = MissionStatus.CREATED;
-        this.currentPosition = route.getOrigin().getPosition();
+        this.currentPosition = drone.getPosition();
         this.batteryLevel = drone.getBatteryLevel();
-        this.organTemperature = 4.0;
-        this.shockLevel = 0.0;
         this.receptionConfirmed = false;
         this.history = new ArrayList<>();
         addHistoryEvent("Mission created");
@@ -98,7 +97,9 @@ public class Mission implements Serializable {
         }
     }
 
-   
+    public String getId() {
+        return id;
+    }
 
     public DeliveryRequest getRequest() {
         return request;
@@ -126,5 +127,13 @@ public class Mission implements Serializable {
 
     public List<String> getHistory() {
         return new ArrayList<>(history);
+    }
+
+    public Position getCurrentPosition() {
+        return currentPosition;
+    }
+
+    public double getBatteryLevel() {
+        return batteryLevel;
     }
 }
