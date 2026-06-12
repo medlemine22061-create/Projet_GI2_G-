@@ -92,7 +92,7 @@ public class Main {
                 hospitalA
         );
 
-        optimizationService = new OptimizationService(map.getDelaunayTriangulation());
+        optimizationService = new OptimizationService(map.getDelaunayTriangulation(), map);
     }
 
     private static void launchMenu() {
@@ -715,7 +715,7 @@ public class Main {
 
         try {
             map = importExportService.importMap(path);
-            optimizationService = new OptimizationService(map.getDelaunayTriangulation());
+            optimizationService = new OptimizationService(map.getDelaunayTriangulation(), map);
             System.out.println("Map imported.");
         } catch (Exception e) {
             System.out.println("Import error: " + e.getMessage());
