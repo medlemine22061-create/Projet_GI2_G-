@@ -1,0 +1,5 @@
+H,H3,Hospital Est,300,200
+H,H4,Hospital Ouest,650,450
+H,H5,Hospital Centre,400,300
+C,C3,Centre Nord,150,100,Kidney|Heart
+C,C4,Centre Sud,700,550,Liver|Lung|Kidney
