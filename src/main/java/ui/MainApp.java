@@ -12,7 +12,7 @@ import model.MedicalStaff;
 import model.Position;
 import service.ImportExportService;
 import service.OptimizationService;
-
+import model.UserPoint;
 import java.util.Arrays;
 
 /**

@@ -48,15 +48,14 @@ public class MainWindow extends BorderPane {
 
     // ── UI ────────────────────────────────────────────────────────────────────
     private final MapCanvas mapCanvas;
-    private int userPointCounter = 0;
     private Mission currentMission;
 
     // ── Styles ────────────────────────────────────────────────────────────────
     private static final String ROOT_STYLE =
-            "-fx-background-color: #161A22;";
+            "-fx-background-color: #2C2C2A;";
     private static final String SIDEBAR_STYLE =
-            "-fx-background-color: #0D1420;"
-                    + " -fx-border-color: #1E2E48; -fx-border-width: 0 1 0 0;";
+            "-fx-background-color: #1E1E1C;"
+                    + " -fx-border-color: #3A3A38; -fx-border-width: 0 1 0 0;";
 
 
     // ── Constructor ───────────────────────────────────────────────────────────
@@ -87,8 +86,8 @@ public class MainWindow extends BorderPane {
         HBox bar = new HBox();
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(10, 20, 10, 20));
-        bar.setStyle("-fx-background-color: #070C14;"
-                + " -fx-border-color: #1E2E48; -fx-border-width: 0 0 1 0;");
+        bar.setStyle("-fx-background-color: #161614;"
+                + " -fx-border-color: #3A3A38; -fx-border-width: 0 0 1 0;");
 
         Label cross = new Label("✚");
         cross.setStyle("-fx-text-fill: #1ED882; -fx-font-size: 18px;");
@@ -117,6 +116,7 @@ public class MainWindow extends BorderPane {
 
         p.getChildren().add(section("DRONE BASES"));
         p.getChildren().add(btn("＋  Add Drone Base",        "#8C64FF", e -> addDroneBase()));
+        p.getChildren().add(btn("＋  Add Drone to Base",     "#8C64FF", e -> addDroneToBase()));
         p.getChildren().add(sep());
 
         // Map Data
@@ -127,12 +127,6 @@ public class MainWindow extends BorderPane {
         p.getChildren().add(sep());
 
         // Diagnostics
-        p.getChildren().add(section("USER POINTS"));
-        p.getChildren().add(btn("+   Add User Point",         "#C864FF", e -> addUserPoint()));
-        p.getChildren().add(btn("+   Add Random User Points", "#C864FF", e -> addRandomUserPoints()));
-        p.getChildren().add(btn("x   Remove User Point",      "#FF5050", e -> removeUserPoint()));
-        p.getChildren().add(sep());
-
         p.getChildren().add(section("DIAGNOSTICS"));
         p.getChildren().add(btn("    Statistics",             "#50C0FF", e -> stats()));
         p.getChildren().add(btn("    Find Nearest Site",      "#50C0FF", e -> findNearest()));
@@ -162,10 +156,10 @@ public class MainWindow extends BorderPane {
         b.setMaxWidth(Double.MAX_VALUE);
         b.setAlignment(Pos.CENTER_LEFT);
         b.setPadding(new Insets(7, 10, 7, 10));
-        String base = "-fx-background-color:#0E1828; -fx-text-fill:" + hex
+        String base = "-fx-background-color:#252523; -fx-text-fill:" + hex
                 + "; -fx-font-family:'Monospace'; -fx-font-size:11px;"
                 + " -fx-background-radius:5; -fx-cursor:hand;";
-        String hover = "-fx-background-color:#192E50; -fx-text-fill:" + hex
+        String hover = "-fx-background-color:#3A3A38; -fx-text-fill:" + hex
                 + "; -fx-font-family:'Monospace'; -fx-font-size:11px;"
                 + " -fx-background-radius:5; -fx-cursor:hand;";
         b.setStyle(base);
@@ -193,12 +187,27 @@ public class MainWindow extends BorderPane {
 
     private void addHospital() {
         try {
-            String id   = ask("Hospital ID  (e.g. H3)");
-            String name = ask("Hospital name");
-            double x    = askD("X coordinate  (0–850)");
-            double y    = askD("Y coordinate  (0–620)");
-            mapModel.addMedicalSite(new model.Hospital(id, name, new Position(x, y), true));
-            refresh("✚  Hospital added: " + name);
+            String id      = ask("Hospital ID  (e.g. H3)");
+            String name    = ask("Hospital name");
+            double x       = askD("X coordinate  (0-850)");
+            double y       = askD("Y coordinate  (0-620)");
+            int numDoctors = (int) askD("Number of doctors responsible for deliveries");
+
+            model.Hospital newHospital = new model.Hospital(id, name, new Position(x, y), true);
+            mapModel.addMedicalSite(newHospital);
+
+            // Register hospital as UserPoint (numDoctors = number of user points)
+            // Each doctor is a potential requester -> add N user points for this hospital
+            for (int i = 0; i < numDoctors; i++) {
+                UserPoint up = new UserPoint("U-" + id + "-D" + (i+1), new Position(x, y));
+                mapModel.addUserPoint(up);
+            }
+            String nearest = mapModel.getVoronoiDiagram().getNearestSite(new Position(x, y)) != null
+                    ? mapModel.getVoronoiDiagram().getNearestSite(new Position(x, y)).getName()
+                    : "none";
+            refresh("+ Hospital added: " + name
+                    + "\n  Doctors registered: " + numDoctors
+                    + "\n  Nearest collection center: " + nearest);
         } catch (Exception e) { err(e.getMessage()); }
     }
 
@@ -238,6 +247,77 @@ public class MainWindow extends BorderPane {
             refresh("↔  Site moved: " + site.getName()
                     + " → (" + (int)x + ", " + (int)y + ")");
         } catch (Exception e) { err(e.getMessage()); }
+    }
+
+    /**
+     * Adds a single drone to an existing drone base.
+     * Shows an error if no base exists on the map.
+     */
+    private void addDroneToBase() {
+        // Check if any base exists
+        if (mapModel.getDroneBases().isEmpty()) {
+            err("No drone base available on the map.\n"
+                    + "Please add a drone base first using 'Add Drone Base'.");
+            return;
+        }
+
+        try {
+            // List available bases
+            StringBuilder list = new StringBuilder("Available bases:\n");
+            for (model.DroneBase b : mapModel.getDroneBases()) {
+                int available = b.getAvailableDrones().size();
+                int total     = b.getDrones().size();
+                int capacity  = b.getCapacity();
+                list.append("  ").append(b.getId())
+                        .append("  ->  ").append(b.getName())
+                        .append("  [").append(total).append("/").append(capacity).append(" drones]");
+                if (total >= capacity)
+                    list.append("  FULL");
+                list.append("\n");
+            }
+            mapCanvas.showStats(list.toString());
+
+            String baseId = ask("Base ID to add drone to");
+            model.DroneBase base = null;
+            for (model.DroneBase b : mapModel.getDroneBases())
+                if (b.getId().equalsIgnoreCase(baseId)) { base = b; break; }
+
+            if (base == null) {
+                mapCanvas.closeStats();
+                err("No base found with ID: " + baseId);
+                return;
+            }
+
+            if (base.getDrones().size() >= base.getCapacity()) {
+                mapCanvas.closeStats();
+                err("Base [" + base.getName() + "] is full.\n"
+                        + "Capacity: " + base.getCapacity() + " drones.\n"
+                        + "Please increase the capacity or choose another base.");
+                return;
+            }
+
+            // Drone info
+            String droneId  = ask("Drone ID  (e.g. D4)");
+            double autonomy = askD("Autonomy  km  (e.g. 1000)");
+            double battery  = askD("Battery level  %  (0-100)");
+            double payload  = askD("Max payload  kg  (e.g. 5)");
+            double speed    = askD("Speed  km/h  (e.g. 60)");
+
+            model.Drone drone = new model.Drone(droneId, autonomy, battery, payload, speed,
+                    new Position(base.getPosition().getX(), base.getPosition().getY()));
+
+            base.addDrone(drone);
+            mapModel.addDrone(drone);
+
+            mapCanvas.closeStats();
+            refresh("+ Drone added: " + droneId
+                    + "\n  Base    : " + base.getName()
+                    + "\n  Battery : " + (int)battery + "%"
+                    + "\n  Autonomy: " + (int)autonomy + " km"
+                    + "\n  Drones in base: " + base.getDrones().size()
+                    + "/" + base.getCapacity());
+
+        } catch (Exception e) { mapCanvas.closeStats(); err(e.getMessage()); }
     }
 
     /**
@@ -332,93 +412,157 @@ public class MainWindow extends BorderPane {
 
     private void exportMap() {
         try {
-            String path = ask("Export file path  (e.g. map.bin)");
+            // Default: current working directory
+            String defaultPath = System.getProperty("user.home")
+                    + java.io.File.separator + "medadrone_map.bin";
+
+            javafx.scene.control.TextInputDialog d = new javafx.scene.control.TextInputDialog(defaultPath);
+            d.setTitle("Export map");
+            d.setHeaderText("Export path");
+            d.setContentText("Save to:");
+            java.util.Optional<String> result = d.showAndWait();
+            if (result.isEmpty() || result.get().isBlank()) return;
+
+            String path = result.get().trim();
+            java.io.File file = new java.io.File(path);
+
+            // Create parent directories if needed
+            if (file.getParentFile() != null && !file.getParentFile().exists()) {
+                file.getParentFile().mkdirs();
+            }
+
             importExportService.exportMap(mapModel, path);
-            log("💾  Map exported to: " + path);
-        } catch (Exception e) { err(e.getMessage()); }
+            mapCanvas.showStats("Map exported successfully\n  Path: " + path);
+        } catch (Exception e) {
+            err("Export failed: " + e.getMessage()
+                    + "\nTip: use a simple path like: "
+                    + System.getProperty("user.home") + "/medadrone_map.bin");
+        }
     }
 
     private void importMap() {
         try {
-            String path = ask("Import file path  (e.g. map.bin)");
-            importExportService.importMap(path);
-            log("📂  Map imported from: " + path);
-            info("Import successful", "Restart the app to load the imported map.");
-        } catch (Exception e) { err(e.getMessage()); }
-    }
+            String defaultPath = System.getProperty("user.home")
+                    + java.io.File.separator + "medadrone_map.bin";
 
-    private void addUserPoint() {
-        try {
-            double x = askD("X coordinate  (0-850)");
-            double y = askD("Y coordinate  (0-620)");
-            String id = "U" + (++userPointCounter);
-            UserPoint up = new UserPoint(id, new Position(x, y));
-            mapModel.addUserPoint(up);
-            refresh("+ User point added: " + id
-                    + " -> nearest: " + (up.getNearestSite() != null
-                    ? up.getNearestSite().getName() : "none"));
-        } catch (Exception e) { err(e.getMessage()); }
-    }
+            javafx.scene.control.TextInputDialog d = new javafx.scene.control.TextInputDialog(defaultPath);
+            d.setTitle("Import map");
+            d.setHeaderText("Import path");
+            d.setContentText("Load from:");
+            java.util.Optional<String> result = d.showAndWait();
+            if (result.isEmpty() || result.get().isBlank()) return;
 
-    private void addRandomUserPoints() {
-        try {
-            int count = (int) askD("Number of random user points to add (e.g. 10)");
-            int before = mapModel.getUserPoints().size();
-            mapModel.addRandomUserPoints(count, 20, 20, 900, 640);
-            int added = mapModel.getUserPoints().size() - before;
-            // Update counter
-            userPointCounter = mapModel.getUserPoints().size();
-            refresh("+ " + added + " random user points added.");
-        } catch (Exception e) { err(e.getMessage()); }
-    }
-
-    private void removeUserPoint() {
-        try {
-            if (mapModel.getUserPoints().isEmpty()) {
-                err("No user points on the map."); return;
+            String path = result.get().trim();
+            java.io.File file = new java.io.File(path);
+            if (!file.exists()) {
+                err("File not found: " + path
+                        + "\nMake sure you exported the map first."); return;
             }
-            StringBuilder list = new StringBuilder("User points:\n");
-            for (UserPoint up : mapModel.getUserPoints())
-                list.append("  ").append(up.getId()).append("  (")
-                        .append((int)up.getPosition().getX()).append(",")
-                        .append((int)up.getPosition().getY()).append(")\n");
-            mapCanvas.showStats(list.toString());
-            String id = ask("User point ID to remove");
-            UserPoint found = null;
-            for (UserPoint up : mapModel.getUserPoints())
-                if (up.getId().equalsIgnoreCase(id)) { found = up; break; }
-            if (found == null) { err("User point not found: " + id); return; }
-            mapModel.removeUserPoint(found);
-            mapCanvas.closeStats();
-            refresh("x User point removed: " + id);
-        } catch (Exception e) { err(e.getMessage()); }
+
+            importExportService.importMap(path);
+            mapCanvas.showStats("Map imported successfully\n  Path: " + path
+                    + "\n\nNote: hospitals and collection centers\n"
+                    + "are fixed data in our system.\n"
+                    + "Import loads drone bases and drones.");
+        } catch (Exception e) {
+            err("Import failed: " + e.getMessage());
+        }
     }
 
     private void stats() {
         StringBuilder sb = new StringBuilder();
-        sb.append("── STATISTICS ─────────────────────────\n");
+        sb.append("── GENERAL ────────────────────────────\n");
         sb.append("  Hospitals       : ").append(mapModel.getHospitals().size()).append("\n");
         sb.append("  Collection ctrs : ").append(mapModel.getCollectionCenters().size()).append("\n");
         sb.append("  Drone bases     : ").append(mapModel.getDroneBases().size()).append("\n");
         sb.append("  Drones          : ").append(mapModel.getDrones().size()).append("\n");
         sb.append("  Voronoi cells   : ").append(mapModel.getVoronoiDiagram().getCells().size()).append("\n");
         sb.append("  Delaunay tri.   : ").append(mapModel.getDelaunayTriangulation().getTriangles().size()).append("\n");
+        sb.append("  User points     : ").append(mapModel.getUserPoints().size()).append("\n");
+
+        // ── Distances centre-hopital ──────────────────────────────────────────
+        sb.append("\n── CENTER-HOSPITAL DISTANCES ──────────\n");
+        double minDist = Double.MAX_VALUE, maxDist = 0, sumDist = 0;
+        int pairCount = 0;
+        for (Hospital h : mapModel.getHospitals()) {
+            for (CollectionCenter c : mapModel.getCollectionCenters()) {
+                double d = h.getPosition().distanceTo(c.getPosition());
+                if (d < minDist) minDist = d;
+                if (d > maxDist) maxDist = d;
+                sumDist += d;
+                pairCount++;
+            }
+        }
+        if (pairCount > 0) {
+            sb.append(String.format("  Min distance    : %.1f units\n", minDist));
+            sb.append(String.format("  Max distance    : %.1f units\n", maxDist));
+            sb.append(String.format("  Avg distance    : %.1f units\n", sumDist / pairCount));
+            sb.append("  Pairs analyzed  : ").append(pairCount).append("\n");
+        } else {
+            sb.append("  No hospital-center pairs found.\n");
+        }
+
+        // ── Voronoi zones ─────────────────────────────────────────────────────
         sb.append("\n── VORONOI ZONES ──────────────────────\n");
         for (var cell : mapModel.getVoronoiDiagram().getCells()) {
-            sb.append(String.format("  %-20s  surface:%5.0f  density:%.4f\n",
-                    cell.getOwner().getName(), cell.getSurface(), cell.getDensity()));
+            sb.append(String.format("  %-18s  surface:%5.0f  userpts:%d\n",
+                    cell.getOwner().getName(), cell.getSurface(), cell.getNumberOfUserPoints()));
         }
-        // Afficher sur le canvas, pas dans un terminal
+
+        // ── Doctors par hopital ───────────────────────────────────────────────
+        sb.append("\n── DOCTORS PER HOSPITAL ───────────────\n");
+        for (Hospital h : mapModel.getHospitals()) {
+            long doctorCount = mapModel.getUserPoints().stream()
+                    .filter(up -> up.getId().startsWith("U-" + h.getId() + "-D"))
+                    .count();
+            sb.append(String.format("  %-18s  doctors: %d\n",
+                    h.getName(), doctorCount));
+        }
+
         mapCanvas.showStats(sb.toString());
     }
 
     private void findNearest() {
         try {
-            double x = askD("X coordinate");
-            double y = askD("Y coordinate");
-            MedicalSite s = mapModel.getVoronoiDiagram().getNearestSite(new Position(x, y));
-            log(s == null ? "  No site found."
-                    : "🔍  Nearest site: [" + s.getId() + "]  " + s.getName());
+            double x = askD("X coordinate  (0-850)");
+            double y = askD("Y coordinate  (0-620)");
+            Position pos = new Position(x, y);
+
+            StringBuilder sb = new StringBuilder("── FIND NEAREST ───────────────────────\n");
+
+            // Nearest collection center (via Voronoi)
+            CollectionCenter nearestCenter = null;
+            double minCenterDist = Double.MAX_VALUE;
+            for (CollectionCenter c : mapModel.getCollectionCenters()) {
+                double d = pos.distanceTo(c.getPosition());
+                if (d < minCenterDist) { minCenterDist = d; nearestCenter = c; }
+            }
+            if (nearestCenter != null) {
+                sb.append(String.format("  Nearest center  : [%s] %s  (%.1f units)\n",
+                        nearestCenter.getId(), nearestCenter.getName(), minCenterDist));
+            } else {
+                sb.append("  No collection center found.\n");
+            }
+
+            // Optimal drone base (minimises dist_to_center + dist_to_pos)
+            model.DroneBase optimalBase = null;
+            double minScore = Double.MAX_VALUE;
+            for (model.DroneBase b : mapModel.getDroneBases()) {
+                if (b.getAvailableDrones().isEmpty()) continue;
+                double score = b.getPosition().distanceTo(pos)
+                        + (nearestCenter != null
+                        ? b.getPosition().distanceTo(nearestCenter.getPosition()) : 0);
+                if (score < minScore) { minScore = score; optimalBase = b; }
+            }
+            if (optimalBase != null) {
+                sb.append(String.format("  Optimal base    : [%s] %s  (score=%.1f)\n",
+                        optimalBase.getId(), optimalBase.getName(), minScore));
+                sb.append("    Available drones: " + optimalBase.getAvailableDrones().size() + "\n");
+            } else {
+                sb.append("  No drone base available.\n");
+            }
+
+            mapCanvas.showStats(sb.toString());
         } catch (Exception e) { err(e.getMessage()); }
     }
 
@@ -432,35 +576,59 @@ public class MainWindow extends BorderPane {
      *
      * The system automatically selects the nearest available drone from its base.
      */
+    /**
+     * Creates a mission.
+     * The user provides ONLY the hospital ID.
+     * The system automatically:
+     *   1. Finds the nearest collection center (via Voronoi)
+     *   2. Finds the optimal drone base (minimises dist_base->center + dist_base->hospital)
+     *   3. Selects the best available drone in that base
+     */
     private void createMission() {
         try {
-            // List available hospitals
-            StringBuilder hList = new StringBuilder("\n── Available hospitals ────────\n");
+            if (mapModel.getHospitals().isEmpty()) {
+                err("No hospital on the map. Please add a hospital first."); return;
+            }
+            if (mapModel.getCollectionCenters().isEmpty()) {
+                err("No collection center on the map."); return;
+            }
+            if (mapModel.getDroneBases().isEmpty()) {
+                err("No drone base on the map. Please add a drone base first."); return;
+            }
+
+            // Show available hospitals on canvas
+            StringBuilder hList = new StringBuilder("── Available hospitals ─────────\n");
             for (Hospital h : mapModel.getHospitals())
-                hList.append("  ").append(h.getId()).append("  ->  ").append(h.getName()).append("\n");
+                hList.append("  [").append(h.getId()).append("]  ").append(h.getName()).append("\n");
+            mapCanvas.showStats(hList.toString());
 
-            // List available collection centers
-            StringBuilder cList = new StringBuilder("── Available collection centers ──\n");
-            for (CollectionCenter c : mapModel.getCollectionCenters())
-                cList.append("  ").append(c.getId()).append("  ->  ").append(c.getName()).append("\n");
+            String hospId = ask("Hospital ID issuing the request");
+            Hospital hospital = findHospital(hospId);
+            if (hospital == null) {
+                mapCanvas.closeStats();
+                err("Hospital not found: " + hospId); return;
+            }
 
-            log(hList.toString());
-            log(cList.toString());
-
-            String hospId   = ask("Hospital ID issuing the request (requester + destination)");
-            String centerId = ask("Collection center ID (organ origin)");
-
-            Hospital         hospital = findHospital(hospId);
-            CollectionCenter center   = findCenter(centerId);
-
-            if (hospital == null) { err("Hospital not found: " + hospId);           return; }
-            if (center   == null) { err("Collection center not found: " + centerId); return; }
+            // Auto-find nearest collection center via Voronoi
+            CollectionCenter center = null;
+            double minDist = Double.MAX_VALUE;
+            for (CollectionCenter c : mapModel.getCollectionCenters()) {
+                double d = hospital.getPosition().distanceTo(c.getPosition());
+                if (d < minDist) { minDist = d; center = c; }
+            }
+            if (center == null) {
+                mapCanvas.closeStats();
+                err("No collection center found."); return;
+            }
 
             String organ = ask("Organ type  (e.g. Kidney, Heart, Liver)");
 
-            // Find optimal base BEFORE creating the request (for display)
+            // Auto-find optimal base
             model.DroneBase optimalBase = optimizationService.findOptimalBase(center, hospital);
-            if (optimalBase == null) { err("No drone base available."); return; }
+            if (optimalBase == null) {
+                mapCanvas.closeStats();
+                err("No drone base available or all drones are in mission."); return;
+            }
 
             double scoreBase =
                     optimalBase.getPosition().distanceTo(center.getPosition())
@@ -475,39 +643,27 @@ public class MainWindow extends BorderPane {
             currentMission = optimizationService.createMission(request, mapModel.getDrones());
             mapCanvas.setCurrentMission(currentMission);
 
-            refresh(String.format(
-                    "\n=== MISSION CREATED ===================================\n"
+            mapCanvas.showStats(String.format(
+                    "=== MISSION CREATED ===========================\n"
+                            + "  Hospital   : [%s] %s\n"
+                            + "  Center     : [%s] %s  (auto-selected, %.1f units)\n"
                             + "  Organ      : %s\n"
-                            + "  From       : [%s] %s\n"
-                            + "  To         : [%s] %s\n"
-                            + "\n--- Optimal base selection (Voronoi zone coverage) ---\n"
-                            + "  Base       : %s\n"
-                            + "  Score      : %.1f  (dist_to_center + dist_to_hospital)\n"
-                            + "\n--- Delaunay adjacency check -------------------------\n"
-                            + "  Center & hospital are Delaunay neighbours: %s\n"
-                            + "  -> %s\n"
-                            + "\n--- Selected drone -----------------------------------\n"
-                            + "  Drone      : %s  (battery: %d%%)\n"
-                            + "  Route      : [%s] -> [%s] -> [%s]\n"
-                            + "  Distance   : %.1f units\n"
-                            + "=======================================================\n"
-                            + "  Click 'Launch & Animate' to watch the drone fly.",
-                    organ,
-                    center.getId(),   center.getName(),
+                            + "\n  Optimal base  : %s  (score=%.1f)\n"
+                            + "  Drone         : %s  (battery: %d%%)\n"
+                            + "  Delaunay adj  : %s\n"
+                            + "  Route dist    : %.1f units\n"
+                            + "==============================================\n"
+                            + "  Click Launch & Animate to start the mission.",
                     hospital.getId(), hospital.getName(),
+                    center.getId(),   center.getName(), minDist,
+                    organ,
                     optimalBase.getName(), scoreBase,
-                    adjacent ? "YES" : "NO",
-                    adjacent
-                            ? "Direct flight confirmed as geometrically optimal by Delaunay."
-                            : "No direct Delaunay edge — route goes through nearest Voronoi path.",
                     currentMission.getDrone().getId(),
                     (int) currentMission.getDrone().getBatteryLevel(),
-                    optimalBase.getName(),
-                    center.getName(),
-                    hospital.getName(),
+                    adjacent ? "YES (direct route optimal)" : "NO",
                     currentMission.getRoute().computeDistance()
             ));
-        } catch (Exception e) { err(e.getMessage()); }
+        } catch (Exception e) { mapCanvas.closeStats(); err(e.getMessage()); }
     }
 
     private void launchMission() {
@@ -519,20 +675,48 @@ public class MainWindow extends BorderPane {
 
     private void trackMission() {
         if (currentMission == null) { err("No current mission."); return; }
-        log(String.format(
-                "\n── MISSION TRACKING ─────────────────\n"
-                        + "  ID       : %s\n"
-                        + "  Status   : %s\n"
-                        + "  Drone    : %s\n"
-                        + "  Battery  : %.0f%%\n"
-                        + "  Position : (%.0f, %.0f)\n"
-                        + "  Reception: %s",
+
+        Position pos = currentMission.getCurrentPosition();
+        double   bat = currentMission.getBatteryLevel();
+
+        // Simulate battery consumption based on distance travelled
+        double totalDist = currentMission.getRoute().computeDistance();
+        double drone_speed = currentMission.getDrone().getAutonomy();
+        double batteryConsumed = totalDist > 0 && drone_speed > 0
+                ? (totalDist / drone_speed) * 100.0 : 0;
+        double currentBattery = Math.max(0, bat - batteryConsumed);
+
+        // Battery bar visual (10 blocks)
+        int filled = (int)(currentBattery / 10);
+        StringBuilder bar = new StringBuilder("  [");
+        for (int i = 0; i < 10; i++) bar.append(i < filled ? "█" : "░");
+        bar.append("]  ").append(String.format("%.0f%%", currentBattery));
+
+        String batteryStatus = currentBattery > 60 ? "GOOD"
+                : currentBattery > 30 ? "LOW"
+                : "CRITICAL";
+
+        mapCanvas.showStats(String.format(
+                "── MISSION TRACKING ──────────────────\n"
+                        + "  Mission ID  : %s\n"
+                        + "  Status      : %s\n"
+                        + "  Drone       : %s\n"
+                        + "\n── LIVE POSITION ──────────────────────\n"
+                        + "  X = %.1f   Y = %.1f\n"
+                        + "\n── BATTERY ────────────────────────────\n"
+                        + "%s\n"
+                        + "  Status      : %s\n"
+                        + "\n── MISSION INFO ───────────────────────\n"
+                        + "  Route dist  : %.1f units\n"
+                        + "  Reception   : %s",
                 currentMission.getId(),
                 currentMission.getStatus(),
                 currentMission.getDrone().getId(),
-                currentMission.getBatteryLevel(),
-                currentMission.getCurrentPosition().getX(),
-                currentMission.getCurrentPosition().getY(),
+                pos != null ? pos.getX() : 0,
+                pos != null ? pos.getY() : 0,
+                bar.toString(),
+                batteryStatus,
+                totalDist,
                 currentMission.isReceptionConfirmed() ? "Confirmed ✔" : "Pending"
         ));
     }
@@ -578,14 +762,14 @@ public class MainWindow extends BorderPane {
         catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid number."); }
     }
 
-    private void refresh(String msg) { mapCanvas.draw(); mapCanvas.showStats(msg); }
-    private void log(String msg)     { mapCanvas.showStats(msg); }
+    private void refresh(String msg) { mapCanvas.draw(); }
+    private void log(String msg)     { /* messages go to canvas panels only when relevant */ }
 
     private void err(String msg) {
         Alert a = new Alert(Alert.AlertType.ERROR);
         a.setTitle("Error"); a.setHeaderText(null); a.setContentText(msg);
         a.showAndWait();
-        log("⚠   " + msg);
+        // Do NOT call showStats on error — stats panel is for statistics only
     }
 
     private void info(String title, String msg) {

@@ -36,8 +36,8 @@ import java.util.List;
 public class MapCanvas extends Canvas {
 
     // ── Palette ───────────────────────────────────────────────────────────────
-    private static final Color BG           = Color.rgb(22,  26,  34);
-    private static final Color GRID_CLR     = Color.rgb(38,  44,  56);
+    private static final Color BG           = Color.rgb(44,  44,  42);
+    private static final Color GRID_CLR     = Color.rgb(38,  38,  36);
     private static final Color HOSPITAL_CLR = Color.rgb(30,  210, 100);
     private static final Color CENTER_CLR   = Color.rgb(255, 160, 40);
     private static final Color BASE_CLR     = Color.rgb(180, 190, 210);
@@ -46,7 +46,7 @@ public class MapCanvas extends Canvas {
     private static final Color DELAUNAY_CLR = Color.rgb(90,  130, 210, 0.38);
     private static final Color DELAUNAY_SEL = Color.rgb(90,  130, 210, 0.90);
     private static final Color TEXT_CLR     = Color.rgb(215, 228, 248);
-    private static final Color PANEL_BG     = Color.rgb(14,  18,  28,  0.92);
+    private static final Color PANEL_BG     = Color.rgb(18,  18,  16,  0.94);
     private static final Color ACCENT       = Color.rgb(40,  210, 135);
     private static final Color DRAG_CLR     = Color.rgb(255, 255, 100, 0.6);
     private static final Color USERPT_CLR   = Color.rgb(200, 100, 255);
@@ -99,7 +99,13 @@ public class MapCanvas extends Canvas {
     private List<VoronoiCell> neighbourCells = new ArrayList<>(); // for user point highlight
 
     // ── Stats panel ───────────────────────────────────────────────────────────
-    private String statsText = null;
+    // Stats panel (draggable)
+    private String  statsText     = null;
+    private double  statsPanelX   = -1;
+    private double  statsPanelY   = -1;
+    private boolean draggingStats = false;
+    private double  statsDragOffX = 0;
+    private double  statsDragOffY = 0;
 
     // ── Drag & drop ───────────────────────────────────────────────────────────
     private MedicalSite draggingSite = null;
@@ -175,7 +181,7 @@ public class MapCanvas extends Canvas {
     }
 
     public void showStats(String text) { this.statsText = text; draw(); }
-    public void closeStats()           { this.statsText = null; draw(); }
+    public void closeStats()           { this.statsText = null; statsPanelX = -1; statsPanelY = -1; draw(); }
 
     /** Full redraw. */
     public void draw() {
@@ -303,7 +309,7 @@ public class MapCanvas extends Canvas {
                 gc.setLineWidth((sel ? 1.2 : 0.8) / scale);
                 gc.setLineDashes(4, 4);
                 gc.strokeLine(x, y, ns.getX(), ns.getY());
-                gc.setLineDashes();
+                gc.setLineDashes((double[]) null);
             }
 
             // Diamond shape
@@ -334,7 +340,7 @@ public class MapCanvas extends Canvas {
         }
         Position dest = route.getDestination().getPosition();
         gc.strokeLine(cur.getX(), cur.getY(), dest.getX(), dest.getY());
-        gc.setLineDashes();
+        gc.setLineDashes((double[]) null);
         dot(gc, ROUTE_CLR, center.getX(), center.getY(), 5 / scale);
         dot(gc, ROUTE_CLR, dest.getX(),   dest.getY(),   5 / scale);
     }
@@ -644,32 +650,38 @@ public class MapCanvas extends Canvas {
 
     private void drawStatsPanel(GraphicsContext gc) {
         if (statsText == null) return;
-        String[] lines = statsText.split("\n");
-        double pw = 380, ph = 34 + lines.length * 17 + 16;
-        double px = (getWidth() - pw) / 2;
-        double py = (getHeight() - ph) / 2;
+        String[] statLines = statsText.split("\n");
+        double pw = 380, ph = 34 + statLines.length * 17 + 16;
+        if (statsPanelX < 0) statsPanelX = (getWidth()  - pw) / 2;
+        if (statsPanelY < 0) statsPanelY = (getHeight() - ph) / 2;
+        double px = statsPanelX;
+        double py = statsPanelY;
         gc.setFill(Color.rgb(0,0,0,0.45));
         gc.fillRoundRect(px+4, py+4, pw, ph, 14, 14);
         gc.setFill(PANEL_BG); gc.fillRoundRect(px, py, pw, ph, 14, 14);
         gc.setStroke(ACCENT); gc.setLineWidth(1.8);
         gc.strokeRoundRect(px, py, pw, ph, 14, 14);
         gc.setFill(Color.rgb(40,210,135,0.18));
-        gc.fillRoundRect(px, py, pw, 30, 14, 14); gc.fillRect(px, py+18, pw, 12);
+        gc.fillRoundRect(px, py, pw, 30, 14, 14);
+        gc.fillRect(px, py+18, pw, 12);
         gc.setFont(Font.font("Monospace", FontWeight.BOLD, 12));
         gc.setFill(ACCENT); gc.fillText("STATISTICS", px+14, py+20);
         gc.setFont(Font.font("Monospace", FontWeight.BOLD, 13));
         gc.setFill(Color.rgb(255,80,80));
-        gc.fillText("✕", px+pw-24, py+20);
-        for (int i = 0; i < lines.length; i++) {
-            String line = lines[i];
-            if (line.startsWith("──") || line.startsWith("==")) {
+        gc.fillText("X", px+pw-24, py+20);
+        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9));
+        gc.setFill(Color.rgb(100,160,120));
+        gc.fillText("drag to move", px+110, py+20);
+        for (int i = 0; i < statLines.length; i++) {
+            String sl = statLines[i];
+            if (sl.startsWith("--") || sl.startsWith("==")) {
                 gc.setFill(Color.rgb(100,140,180));
                 gc.setFont(Font.font("Monospace", FontWeight.BOLD, 10));
             } else {
                 gc.setFill(TEXT_CLR);
                 gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 11));
             }
-            gc.fillText(line, px+14, py+46 + i*17);
+            gc.fillText(sl, px+14, py+46 + i*17);
         }
     }
 
@@ -695,7 +707,7 @@ public class MapCanvas extends Canvas {
         legendDot(gc, DRONE_FLY,    x, y+68); gc.setFill(TEXT_CLR); gc.fillText("Drone (in flight)",  x+18, y+77);
         legendDiamond(gc, USERPT_CLR, x, y+86); gc.setFill(TEXT_CLR); gc.fillText("User point",       x+18, y+95);
         gc.setStroke(ROUTE_CLR); gc.setLineWidth(2); gc.setLineDashes(6,4);
-        gc.strokeLine(x, y+108, x+10, y+108); gc.setLineDashes();
+        gc.strokeLine(x, y+108, x+10, y+108); gc.setLineDashes((double[]) null);
         gc.setFill(TEXT_CLR); gc.fillText("Mission route",  x+18, y+112);
         gc.setStroke(DELAUNAY_CLR); gc.setLineWidth(1.5);
         gc.strokeLine(x, y+126, x+10, y+126);
@@ -753,7 +765,15 @@ public class MapCanvas extends Canvas {
 
             // Stats close X
             if (statsText != null && isCloseX(sx, sy)) {
-                statsText = null; draw(); return;
+                statsText = null; statsPanelX = -1; statsPanelY = -1; draw(); return;
+            }
+
+            // Drag stats panel (click on header area)
+            if (statsText != null && isStatsHeader(sx, sy)) {
+                draggingStats = true;
+                statsDragOffX = sx - statsPanelX;
+                statsDragOffY = sy - statsPanelY;
+                return;
             }
 
             // Try drag site
@@ -793,6 +813,12 @@ public class MapCanvas extends Canvas {
                 draw(); return;
             }
 
+            if (draggingStats) {
+                statsPanelX = sx - statsDragOffX;
+                statsPanelY = sy - statsDragOffY;
+                draw(); return;
+            }
+
             didDrag = true;
             if (draggingSite != null) {
                 mapModel.moveMedicalSite(draggingSite,
@@ -812,6 +838,7 @@ public class MapCanvas extends Canvas {
         // ── Release ───────────────────────────────────────────────────────────
         setOnMouseReleased(e -> {
             if (panning) { panning = false; return; }
+            if (draggingStats) { draggingStats = false; return; }
             boolean wasDragging = draggingSite != null
                     || draggingBase != null || draggingUser != null;
             draggingSite = null; draggingBase = null; draggingUser = null;
@@ -824,8 +851,12 @@ public class MapCanvas extends Canvas {
     private void handleClick(double sx, double sy) {
         double mx = toModelX(sx), my = toModelY(sy);
 
-        if (statsText != null && isCloseX(sx, sy)) { statsText = null; draw(); return; }
-        if (statsText != null && !isInsideStatsPanel(sx, sy)) { statsText = null; }
+        if (statsText != null && isCloseX(sx, sy)) {
+            statsText = null; statsPanelX = -1; statsPanelY = -1; draw(); return;
+        }
+        if (statsText != null && !isInsideStatsPanel(sx, sy)) {
+            statsText = null; statsPanelX = -1; statsPanelY = -1;
+        }
 
         // Priority: site > base > user point > triangle > empty
         MedicalSite site = siteAt(mx, my);
@@ -919,20 +950,28 @@ public class MapCanvas extends Canvas {
         return best;
     }
 
+    private boolean isStatsHeader(double sx, double sy) {
+        if (statsText == null || statsPanelX < 0) return false;
+        String[] sl = statsText.split("\n");
+        double pw = 380;
+        return sx >= statsPanelX && sx <= statsPanelX + pw - 30
+                && sy >= statsPanelY && sy <= statsPanelY + 30;
+    }
+
     private boolean isCloseX(double sx, double sy) {
-        if (statsText == null) return false;
-        String[] lines = statsText.split("\n");
-        double pw = 380, ph = 34 + lines.length*17 + 16;
-        double px = (getWidth()-pw)/2, py = (getHeight()-ph)/2;
-        return sx >= px+pw-32 && sx <= px+pw-8 && sy >= py+4 && sy <= py+28;
+        if (statsText == null || statsPanelX < 0) return false;
+        String[] sl = statsText.split("\n");
+        double pw = 380;
+        return sx >= statsPanelX+pw-32 && sx <= statsPanelX+pw-8
+                && sy >= statsPanelY+4    && sy <= statsPanelY+28;
     }
 
     private boolean isInsideStatsPanel(double sx, double sy) {
-        if (statsText == null) return false;
-        String[] lines = statsText.split("\n");
-        double pw = 380, ph = 34 + lines.length*17 + 16;
-        double px = (getWidth()-pw)/2, py = (getHeight()-ph)/2;
-        return sx >= px && sx <= px+pw && sy >= py && sy <= py+ph;
+        if (statsText == null || statsPanelX < 0) return false;
+        String[] sl = statsText.split("\n");
+        double pw = 380, ph = 34 + sl.length*17 + 16;
+        return sx >= statsPanelX && sx <= statsPanelX+pw
+                && sy >= statsPanelY && sy <= statsPanelY+ph;
     }
 
     private Position findBasePosition(Drone drone) {
@@ -1009,7 +1048,7 @@ public class MapCanvas extends Canvas {
     }
 
     private void label(GraphicsContext gc, String t, double x, double y) {
-        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 11 / scale));
+        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, Math.max(8, 11 / scale)));
         gc.setFill(Color.rgb(0,0,0,0.55)); gc.fillText(t, x+1, y+1);
         gc.setFill(TEXT_CLR);              gc.fillText(t, x,   y);
     }
