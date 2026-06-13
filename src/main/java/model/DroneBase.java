@@ -5,6 +5,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Represents a drone base that contains drones
+ */
+
 public class DroneBase implements Serializable {
 
     private static final long serialVersionUID = 1L;

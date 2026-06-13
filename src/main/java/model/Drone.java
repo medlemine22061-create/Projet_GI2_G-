@@ -4,6 +4,10 @@ import model.enums.DroneStatus;
 import java.io.Serializable;
 import java.util.Objects;
 
+/**
+ * Represents a drone
+ */
+
 public class Drone implements Serializable {
 
     private static final long serialVersionUID = 1L;
