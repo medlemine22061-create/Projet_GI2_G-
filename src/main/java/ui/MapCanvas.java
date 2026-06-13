@@ -16,1016 +16,841 @@ import model.Mission;
 import model.Position;
 import model.Route;
 import model.Triangle;
-import model.UserPoint;
 import model.VoronoiCell;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Map canvas — MEDADRONE.
+ * Map canvas for the MEDADRONE application.
  *
- * New features vs previous version:
- *  1. Zoom (mouse wheel) + Pan (middle-click drag or right-click drag)
- *  2. User points displayed with link to nearest site
- *  3. Click on user point → highlights neighbouring zones
- *  4. Click on a Delaunay triangle → shows triangle info panel
- *  5. Drag & drop for sites AND drone bases
- *  6. Stats panel on canvas (no log area)
+ * Displays:
+ *  - Voronoi zones (colored dots per zone)
+ *  - Delaunay triangulation edges
+ *  - Hospitals (green circles), Collection Centers (orange squares)
+ *  - Drone bases (hexagons), User points / doctors (purple diamonds)
+ *  - Mission route and animated drone
+ *  - Info panels on click, stats panel, triangle info panel
+ *
+ * Interactions:
+ *  - Click on site  -> info panel
+ *  - Click on base  -> base info panel
+ *  - Click on triangle centroid -> triangle info panel
+ *  - Drag site or base -> move it
+ *  - Drag user point -> move it
+ *  - Mouse wheel -> zoom
+ *  - Middle/right drag -> pan
  */
 public class MapCanvas extends Canvas {
 
-    // ── Palette ───────────────────────────────────────────────────────────────
-    private static final Color BG           = Color.rgb(44,  44,  42);
-    private static final Color GRID_CLR     = Color.rgb(38,  38,  36);
-    private static final Color HOSPITAL_CLR = Color.rgb(30,  210, 100);
-    private static final Color CENTER_CLR   = Color.rgb(255, 160, 40);
-    private static final Color BASE_CLR     = Color.rgb(180, 190, 210);
-    private static final Color DRONE_FLY    = Color.rgb(255, 220, 50);
-    private static final Color ROUTE_CLR    = Color.rgb(255, 65,  65);
-    private static final Color DELAUNAY_CLR = Color.rgb(90,  130, 210, 0.38);
-    private static final Color DELAUNAY_SEL = Color.rgb(90,  130, 210, 0.90);
-    private static final Color TEXT_CLR     = Color.rgb(215, 228, 248);
-    private static final Color PANEL_BG     = Color.rgb(18,  18,  16,  0.94);
-    private static final Color ACCENT       = Color.rgb(40,  210, 135);
-    private static final Color DRAG_CLR     = Color.rgb(255, 255, 100, 0.6);
-    private static final Color USERPT_CLR   = Color.rgb(200, 100, 255);
-    private static final Color LINK_CLR     = Color.rgb(200, 100, 255, 0.45);
+    // ── Colors ────────────────────────────────────────────────────────────────
+    private static final Color BG          = Color.rgb(10,  20,  40);
+    private static final Color GRID        = Color.rgb(20,  36,  68);
+    private static final Color COL_HOSP    = Color.rgb(0,   220, 130);
+    private static final Color COL_CENTER  = Color.rgb(255, 165, 50);
+    private static final Color COL_BASE    = Color.rgb(140, 100, 255);
+    private static final Color COL_DRONE   = Color.rgb(80,  180, 255);
+    private static final Color COL_ROUTE   = Color.rgb(255, 80,  80);
+    private static final Color COL_DEL     = Color.rgb(100, 160, 255, 0.75);
+    private static final Color COL_TEXT    = Color.rgb(210, 230, 255);
+    private static final Color COL_PANEL   = Color.rgb(15,  30,  60,  0.88);
+    private static final Color COL_ACCENT  = Color.rgb(40,  210, 135);
 
-    private static final Color[] VORONOI_FILL = {
-            Color.rgb(30,  210, 100, 0.11), Color.rgb(255, 160, 40,  0.11),
-            Color.rgb(100, 150, 255, 0.11), Color.rgb(200, 60,  240, 0.11),
-            Color.rgb(255, 60,  120, 0.11), Color.rgb(50,  210, 200, 0.11),
+    // Voronoi zone fill colors — each cell gets a distinct tint
+    private static final Color[] VOR_FILL = {
+            Color.rgb(0,   220, 130, 0.22), Color.rgb(255, 165, 50,  0.22),
+            Color.rgb(80,  180, 255, 0.22), Color.rgb(200, 60,  240, 0.22),
+            Color.rgb(255, 60,  120, 0.22), Color.rgb(50,  210, 200, 0.22)
     };
-    private static final Color[] VORONOI_DOT = {
-            Color.rgb(30,  210, 100, 0.55), Color.rgb(255, 160, 40,  0.55),
-            Color.rgb(100, 150, 255, 0.55), Color.rgb(200, 60,  240, 0.55),
-            Color.rgb(255, 60,  120, 0.55), Color.rgb(50,  210, 200, 0.55),
+    // Highlighted colors when a neighbouring user point is selected
+    private static final Color[] VOR_NEIGH = {
+            Color.rgb(0,   220, 130, 0.55), Color.rgb(255, 165, 50,  0.55),
+            Color.rgb(80,  180, 255, 0.55), Color.rgb(200, 60,  240, 0.55),
+            Color.rgb(255, 60,  120, 0.55), Color.rgb(50,  210, 200, 0.55)
     };
-    private static final Color[] VORONOI_HIGH = {
-            Color.rgb(30,  210, 100, 0.40), Color.rgb(255, 160, 40,  0.40),
-            Color.rgb(100, 150, 255, 0.40), Color.rgb(200, 60,  240, 0.40),
-            Color.rgb(255, 60,  120, 0.40), Color.rgb(50,  210, 200, 0.40),
-    };
-
-    // ── Zoom / Pan ────────────────────────────────────────────────────────────
-    private double scale     = 1.0;
-    private double offsetX   = 0.0;
-    private double offsetY   = 0.0;
-    private double panStartX, panStartY;
-    private boolean panning  = false;
 
     // ── Model ─────────────────────────────────────────────────────────────────
-    private final MapModel mapModel;
-    private Mission currentMission;
-    private Position droneBasePos = null;
+    private final MapModel model;
 
-    // ── Animation ─────────────────────────────────────────────────────────────
-    private double        droneAnimProgress = 0.0;
-    private boolean       animating         = false;
-    private AnimationTimer animationTimer;
-    private double        elapsedSec        = 0.0;
-    private final List<Position> trail      = new ArrayList<>();
-    private boolean missionCompleted        = false;
-    private boolean missionCancelled        = false;
+    // ── Mission / animation ───────────────────────────────────────────────────
+    private Mission        mission       = null;
+    private Position       droneStart    = null;
+    private double         animProgress  = 0;
+    private boolean        animating     = false;
+    private double         elapsedSec    = 0;
+    private AnimationTimer timer         = null;
+    private boolean        cancelled     = false;
 
-    // ── Interaction ───────────────────────────────────────────────────────────
-    private MedicalSite hoveredSite   = null;
-    private MedicalSite clickedSite   = null;
-    private DroneBase   clickedBase   = null;
-    private UserPoint   clickedUser   = null;  // highlighted user point
-    private Triangle    clickedTriangle = null; // selected triangle
-    private VoronoiCell selectedCell  = null;
-    private List<VoronoiCell> neighbourCells = new ArrayList<>(); // for user point highlight
+    // ── Zoom / pan ────────────────────────────────────────────────────────────
+    private double scale   = 1.0;
+    private double offX    = 0;
+    private double offY    = 0;
+    private double panX, panY;
+    private boolean panning = false;
+
+    // ── Selection ─────────────────────────────────────────────────────────────
+    private MedicalSite    selSite     = null;
+    private MedicalSite    hovSite     = null;
+    private DroneBase      selBase     = null;
+    private Triangle       selTri      = null;
+    private VoronoiCell    selCell     = null;
+    private VoronoiCell    hovCell     = null;  // cell under mouse hover
 
     // ── Stats panel ───────────────────────────────────────────────────────────
-    // Stats panel (draggable)
-    private String  statsText     = null;
-    private double  statsPanelX   = -1;
-    private double  statsPanelY   = -1;
-    private boolean draggingStats = false;
-    private double  statsDragOffX = 0;
-    private double  statsDragOffY = 0;
+    // Stats panel
+    private String  statsText  = null;
+    private double  spX = -1,  spY = -1;
+    // Info panels (site, base, triangle) — all draggable
+    private double  siteX = -1, siteY = -1;
+    private double  baseX = -1, baseY = -1;
+    private double  triX  = -1, triY  = -1;
+    // Which panel is being dragged
+    private boolean dragStats = false;
+    private boolean dragSiteP = false;
+    private boolean dragBaseP = false;
+    private boolean dragTriP  = false;
+    private double  dspX, dspY;
 
     // ── Drag & drop ───────────────────────────────────────────────────────────
-    private MedicalSite draggingSite = null;
-    private DroneBase   draggingBase = null;
-    private UserPoint   draggingUser = null;
-    private double      dragOffsetX  = 0;
-    private double      dragOffsetY  = 0;
-    private boolean     didDrag      = false;
+    private MedicalSite dragSite = null;
+    private DroneBase   dragBase = null;
+    private double      dox, doy;
+    private boolean     didDrag  = false;
 
     // ── Constructor ───────────────────────────────────────────────────────────
-    public MapCanvas(MapModel mapModel) {
+    public MapCanvas(MapModel model) {
         super(960, 670);
-        this.mapModel = mapModel;
-        widthProperty().addListener(e  -> draw());
+        this.model = model;
+        widthProperty().addListener(e -> draw());
         heightProperty().addListener(e -> draw());
         setupMouse();
     }
 
-    // ── Coordinate transform ──────────────────────────────────────────────────
-
-    /** Convert model coordinates to screen coordinates. */
-    private double toScreenX(double mx) { return mx * scale + offsetX; }
-    private double toScreenY(double my) { return my * scale + offsetY; }
-
-    /** Convert screen coordinates to model coordinates. */
-    private double toModelX(double sx) { return (sx - offsetX) / scale; }
-    private double toModelY(double sy) { return (sy - offsetY) / scale; }
-
     // ── Public API ────────────────────────────────────────────────────────────
 
-    public void setCurrentMission(Mission mission) {
-        stopAnimation();
-        this.currentMission    = mission;
-        this.droneAnimProgress = 0.0;
-        this.elapsedSec        = 0.0;
-        this.missionCompleted  = false;
-        this.missionCancelled  = false;
-        this.trail.clear();
-        if (mission != null) {
-            droneBasePos = findBasePosition(mission.getDrone());
-            if (droneBasePos == null)
-                droneBasePos = new Position(
-                        mission.getDrone().getPosition().getX(),
-                        mission.getDrone().getPosition().getY());
-        }
+    public void setCurrentMission(Mission m) {
+        stopAnim();
+        this.mission      = m;
+        this.animProgress = 0;
+        this.elapsedSec   = 0;
+        this.cancelled    = false;
+        if (m != null) droneStart = basePos(m.getDrone());
         draw();
     }
 
     public void startDroneAnimation() {
-        if (currentMission == null || animating) return;
-        animating = true; droneAnimProgress = 0.0;
-        elapsedSec = 0.0; missionCompleted = false; missionCancelled = false;
-        trail.clear();
-        animationTimer = new AnimationTimer() {
+        if (mission == null || animating) return;
+        animating = true; animProgress = 0; elapsedSec = 0; cancelled = false;
+        timer = new AnimationTimer() {
             private long last = -1;
-            @Override public void handle(long now) {
+            public void handle(long now) {
                 if (last < 0) { last = now; return; }
-                double dt = (now - last) / 1_000_000_000.0; last = now;
-                elapsedSec += dt; droneAnimProgress += dt / 10.0;
-                if (droneAnimProgress >= 1.0) { droneAnimProgress = 1.0; animating = false; stop(); }
+                double dt = (now - last) / 1e9; last = now;
+                elapsedSec   += dt;
+                animProgress += dt / 10.0;
+                if (animProgress >= 1.0) { animProgress = 1.0; animating = false; stop(); }
                 draw();
             }
         };
-        animationTimer.start();
+        timer.start();
     }
 
     public void cancelMission() {
-        stopAnimation();
-        currentMission = null; droneBasePos = null;
-        droneAnimProgress = 0.0; elapsedSec = 0.0;
-        missionCompleted = false; missionCancelled = true;
-        trail.clear(); draw();
+        stopAnim();
+        mission = null; droneStart = null;
+        animProgress = 0; elapsedSec = 0; cancelled = true;
+        draw();
     }
 
-    public void showStats(String text) { this.statsText = text; draw(); }
-    public void closeStats()           { this.statsText = null; statsPanelX = -1; statsPanelY = -1; draw(); }
+    public void showStats(String text) { statsText = text; spX = -1; spY = -1; draw(); }
+    public void closeStats()           { statsText = null; draw(); }
+
+    /** Returns current animation progress (0.0 to 1.0). */
+    public double getAnimProgress() { return animProgress; }
+
+    /** Returns true if drone animation is currently running. */
+    public boolean isAnimating() { return animating; }
 
     /** Full redraw. */
     public void draw() {
         GraphicsContext gc = getGraphicsContext2D();
+
+        // Background
+        gc.setFill(BG);
+        gc.fillRect(0, 0, getWidth(), getHeight());
+
+        // Grid
+        gc.setStroke(GRID); gc.setLineWidth(0.5);
+        double step = 50 * scale;
+        double sx0  = offX % step;
+        double sy0  = offY % step;
+        for (double x = sx0; x < getWidth();  x += step) gc.strokeLine(x, 0, x, getHeight());
+        for (double y = sy0; y < getHeight(); y += step) gc.strokeLine(0, y, getWidth(), y);
+
+        // World-space layers
         gc.save();
-
-        drawBg(gc);
-
-        // Apply zoom/pan transform
-        gc.translate(offsetX, offsetY);
+        gc.translate(offX, offY);
         gc.scale(scale, scale);
 
         drawVoronoi(gc);
         drawDelaunay(gc);
-        drawUserPoints(gc);
         drawRoute(gc);
         drawBases(gc);
         drawSites(gc);
-        drawTrail(gc);
-        drawAnimDrone(gc);
+        drawDrone(gc);
 
         gc.restore();
 
-        // UI overlays — NOT affected by zoom/pan
+        // UI overlays (screen-space)
         drawTimer(gc);
-        drawInfoPanel(gc);
+        drawSitePanel(gc);
+        drawBasePanel(gc);
         drawTrianglePanel(gc);
         drawStatsPanel(gc);
         drawLegend(gc);
-        drawZoomIndicator(gc);
-        drawDragHint(gc);
+        drawHint(gc);
     }
 
-    // ── Drawing layers ────────────────────────────────────────────────────────
-
-    private void drawBg(GraphicsContext gc) {
-        gc.setFill(BG); gc.fillRect(0, 0, getWidth(), getHeight());
-        // Grid adapts to zoom/pan
-        gc.setStroke(GRID_CLR); gc.setLineWidth(0.5 / scale);
-        double step = 50;
-        double startX = -offsetX / scale;
-        double startY = -offsetY / scale;
-        double endX = startX + getWidth() / scale;
-        double endY = startY + getHeight() / scale;
-        for (double x = Math.floor(startX/step)*step; x <= endX; x += step)
-            gc.strokeLine(x, startY, x, endY);
-        for (double y = Math.floor(startY/step)*step; y <= endY; y += step)
-            gc.strokeLine(startX, y, endX, y);
-    }
-
-    private void drawVoronoi(GraphicsContext gc) {
-        List<VoronoiCell> cells = mapModel.getVoronoiDiagram().getCells();
-        for (int i = 0; i < cells.size(); i++) {
-            VoronoiCell cell = cells.get(i);
-            boolean sel  = cell.equals(selectedCell);
-            boolean high = neighbourCells.contains(cell);
-            Color fill = high    ? VORONOI_HIGH[i % VORONOI_HIGH.length]
-                    : sel     ? VORONOI_DOT [i % VORONOI_DOT.length]
-                    : VORONOI_FILL[i % VORONOI_FILL.length];
-            gc.setFill(fill);
-            int k = 0;
-            for (Position p : cell.getPoints()) {
-                if (k % 2 == 0) gc.fillRect(p.getX()-1, p.getY()-1, 4, 4);
-                k++;
-            }
-        }
-    }
+    // ── World-space layers ────────────────────────────────────────────────────
 
     /**
-     * Draws Delaunay triangles.
-     * Selected triangle is drawn filled + highlighted.
+     * Draws Voronoi zones with three visual states:
+     *
+     * 1. NORMAL     : light tint dots
+     * 2. HOVERED    : when the mouse hovers a site, its Voronoi zone
+     *                 lights up brightly (glowing effect)
+     * 3. NEIGHBOUR  : when a user point is selected, adjacent zones
+     *                 are highlighted
+     *
+     * Dot size adapts to zoom: bigger dots when zoomed in (approaching a site).
      */
-    private void drawDelaunay(GraphicsContext gc) {
-        for (Triangle t : mapModel.getDelaunayTriangulation().getTriangles()) {
-            Position a = t.getSiteA().getPosition();
-            Position b = t.getSiteB().getPosition();
-            Position c = t.getSiteC().getPosition();
+    /**
+     * Draws Voronoi zones.
+     * - Normal state  : light tint dots
+     * - Hovered/selected : zone lights up when mouse is over a site
+     * Dot size adapts to zoom so zones become more visible when zooming in.
+     */
+    private void drawVoronoi(GraphicsContext gc) {
+        List<VoronoiCell> cells = model.getVoronoiDiagram().getCells();
+        double dotSize = Math.max(3, Math.min(10, 4 * scale));
+        double half    = dotSize / 2.0;
 
-            if (t.equals(clickedTriangle)) {
-                // Fill selected triangle
-                gc.setFill(Color.rgb(90, 130, 210, 0.22));
-                gc.fillPolygon(
-                        new double[]{a.getX(), b.getX(), c.getX()},
-                        new double[]{a.getY(), b.getY(), c.getY()}, 3);
-                gc.setStroke(DELAUNAY_SEL); gc.setLineWidth(2.0 / scale);
-            } else {
-                gc.setStroke(DELAUNAY_CLR); gc.setLineWidth(1.2 / scale);
+        for (int i = 0; i < cells.size(); i++) {
+            VoronoiCell cell    = cells.get(i);
+            boolean lit         = cell.equals(hovCell) || cell.equals(selCell);
+            Color   fill        = lit ? VOR_NEIGH[i % VOR_NEIGH.length]
+                    : VOR_FILL [i % VOR_FILL.length];
+            gc.setFill(fill);
+            for (Position p : cell.getPoints()) {
+                gc.fillRect(p.getX() - half, p.getY() - half, dotSize, dotSize);
             }
-            gc.strokeLine(a.getX(), a.getY(), b.getX(), b.getY());
-            gc.strokeLine(b.getX(), b.getY(), c.getX(), c.getY());
-            gc.strokeLine(c.getX(), c.getY(), a.getX(), a.getY());
-
-            // Draw circumcenter dot for selected triangle
-            if (t.equals(clickedTriangle)) {
-                Position cc = t.getCircumcenter();
-                if (cc != null) {
-                    gc.setFill(Color.rgb(90, 130, 255, 0.7));
-                    gc.fillOval(cc.getX()-4, cc.getY()-4, 8, 8);
-                    gc.setStroke(Color.rgb(90,130,255,0.9));
-                    gc.setLineWidth(1.0 / scale);
-                    gc.strokeOval(cc.getX() - t.getCircumradius(),
-                            cc.getY() - t.getCircumradius(),
-                            t.getCircumradius()*2, t.getCircumradius()*2);
+            if (lit) {
+                gc.setStroke(VOR_NEIGH[i % VOR_NEIGH.length]);
+                gc.setLineWidth(1.5 / scale);
+                for (Position p : cell.getPoints()) {
+                    gc.strokeRect(p.getX() - half, p.getY() - half, dotSize, dotSize);
                 }
             }
         }
     }
 
-    /**
-     * Draws user points as small purple diamonds.
-     * For each user point, draws a dashed line to its nearest site.
-     * Clicked user point is highlighted larger.
-     */
-    private void drawUserPoints(GraphicsContext gc) {
-        for (UserPoint up : mapModel.getUserPoints()) {
-            double x = up.getPosition().getX();
-            double y = up.getPosition().getY();
-            boolean sel = up.equals(clickedUser);
-            double r = sel ? 6 : 4;
+    private void drawDelaunay(GraphicsContext gc) {
+        for (Triangle t : model.getDelaunayTriangulation().getTriangles()) {
+            Position a = t.getSiteA().getPosition();
+            Position b = t.getSiteB().getPosition();
+            Position c = t.getSiteC().getPosition();
 
-            // Link to nearest site
-            if (up.getNearestSite() != null) {
-                Position ns = up.getNearestSite().getPosition();
-                gc.setStroke(sel ? Color.rgb(200,100,255,0.75) : LINK_CLR);
-                gc.setLineWidth((sel ? 1.2 : 0.8) / scale);
-                gc.setLineDashes(4, 4);
-                gc.strokeLine(x, y, ns.getX(), ns.getY());
-                gc.setLineDashes((double[]) null);
-            }
-
-            // Diamond shape
-            gc.setFill(sel ? Color.rgb(220, 130, 255) : USERPT_CLR);
-            double[] px = {x, x+r, x, x-r};
-            double[] py = {y-r, y, y+r, y};
-            gc.fillPolygon(px, py, 4);
-
+            boolean sel = t.equals(selTri);
             if (sel) {
-                gc.setStroke(Color.WHITE); gc.setLineWidth(1.2 / scale);
-                gc.strokePolygon(px, py, 4);
+                // Fill selected triangle
+                gc.setFill(Color.rgb(90, 130, 210, 0.20));
+                gc.fillPolygon(
+                        new double[]{a.getX(), b.getX(), c.getX()},
+                        new double[]{a.getY(), b.getY(), c.getY()}, 3);
+                gc.setStroke(Color.rgb(90, 130, 255, 0.9));
+                gc.setLineWidth(2.0);
+                // Draw circumcircle
+                Position cc = t.getCircumcenter();
+                if (cc != null) {
+                    double r = t.getCircumradius();
+                    gc.setStroke(Color.rgb(90, 130, 255, 0.5));
+                    gc.setLineWidth(1.0);
+                    gc.strokeOval(cc.getX() - r, cc.getY() - r, r * 2, r * 2);
+                    gc.setFill(Color.rgb(90, 130, 255, 0.7));
+                    gc.fillOval(cc.getX() - 3, cc.getY() - 3, 6, 6);
+                }
+            } else {
+                gc.setStroke(COL_DEL);
+                gc.setLineWidth(1.8);
             }
+            gc.strokeLine(a.getX(), a.getY(), b.getX(), b.getY());
+            gc.strokeLine(b.getX(), b.getY(), c.getX(), c.getY());
+            gc.strokeLine(c.getX(), c.getY(), a.getX(), a.getY());
         }
     }
 
+
     private void drawRoute(GraphicsContext gc) {
-        if (currentMission == null || missionCancelled) return;
-        Route route = currentMission.getRoute();
+        if (mission == null || cancelled) return;
+        Route route = mission.getRoute();
         if (route == null) return;
-        gc.setStroke(ROUTE_CLR); gc.setLineWidth(2.2 / scale);
+
+        gc.setStroke(COL_ROUTE); gc.setLineWidth(2.0);
         gc.setLineDashes(10, 6);
-        Position start  = (droneBasePos != null) ? droneBasePos : route.getOrigin().getPosition();
-        Position center = route.getOrigin().getPosition();
-        gc.strokeLine(start.getX(), start.getY(), center.getX(), center.getY());
-        Position cur = center;
-        for (Position wp : route.getWaypoints()) {
-            gc.strokeLine(cur.getX(), cur.getY(), wp.getX(), wp.getY()); cur = wp;
-        }
-        Position dest = route.getDestination().getPosition();
-        gc.strokeLine(cur.getX(), cur.getY(), dest.getX(), dest.getY());
+
+        Position from  = droneStart != null ? droneStart : route.getOrigin().getPosition();
+        Position ctr   = route.getOrigin().getPosition();
+        Position dest  = route.getDestination().getPosition();
+
+        gc.strokeLine(from.getX(), from.getY(), ctr.getX(), ctr.getY());
+        gc.strokeLine(ctr.getX(), ctr.getY(), dest.getX(), dest.getY());
         gc.setLineDashes((double[]) null);
-        dot(gc, ROUTE_CLR, center.getX(), center.getY(), 5 / scale);
-        dot(gc, ROUTE_CLR, dest.getX(),   dest.getY(),   5 / scale);
+
+        // Endpoint markers
+        gc.setFill(COL_ROUTE);
+        gc.fillOval(ctr.getX()  - 4, ctr.getY()  - 4, 8, 8);
+        gc.fillOval(dest.getX() - 4, dest.getY() - 4, 8, 8);
     }
 
     private void drawBases(GraphicsContext gc) {
-        for (DroneBase base : mapModel.getDroneBases()) {
+        for (DroneBase base : model.getDroneBases()) {
             double x = base.getPosition().getX();
             double y = base.getPosition().getY();
-            boolean clicked  = base.equals(clickedBase);
-            boolean dragging = base.equals(draggingBase);
-            if (clicked || dragging) {
-                gc.setFill(Color.rgb(180,190,210,0.18));
-                gc.fillOval(x-22, y-22, 44, 44);
-            }
+            boolean sel = base.equals(selBase);
+
+            if (sel) { gc.setFill(Color.rgb(180, 190, 210, 0.18)); gc.fillOval(x-20, y-20, 40, 40); }
+
+            // Hexagon
+            double[] px = {x, x-12, x-12, x, x+12, x+12};
+            double[] py = {y-14, y-7, y+7, y+14, y+7, y-7};
             gc.setFill(Color.rgb(38, 48, 64));
-            double[] px = {x, x-13, x-13, x, x+13, x+13};
-            double[] py = {y-15, y-7, y+7, y+15, y+7, y-7};
             gc.fillPolygon(px, py, 6);
-            gc.setStroke(clicked ? Color.WHITE : BASE_CLR);
-            gc.setLineWidth((clicked ? 2.2 : 1.5) / scale);
+            gc.setStroke(sel ? Color.WHITE : COL_BASE);
+            gc.setLineWidth(sel ? 2.0 : 1.4);
             gc.strokePolygon(px, py, 6);
-            gc.setFill(BASE_CLR);
-            gc.setFont(Font.font("Monospace", FontWeight.BOLD, 10 / scale));
-            gc.fillText("H", x-3, y+4);
-            label(gc, "Base  " + base.getName(), x+17, y+4);
+
+            // "H" label inside
+            gc.setFill(COL_BASE);
+            gc.setFont(Font.font("Monospace", FontWeight.BOLD, 10));
+            gc.fillText("H", x - 3, y + 4);
+
+            lbl(gc, "Base  " + base.getName(), x + 16, y + 4);
+
+            // Drones list
             int ly = 18;
             for (Drone d : base.getDrones()) {
-                boolean inFlight = currentMission != null
-                        && d.equals(currentMission.getDrone())
-                        && (animating || missionCompleted);
-                String icon = inFlight ? "✈" : "●";
-                gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9 / scale));
-                gc.setFill(inFlight ? DRONE_FLY : Color.rgb(100, 200, 120));
-                gc.fillText(icon + " " + d.getId() + "  " + (int)d.getBatteryLevel() + "%", x+17, y+ly);
+                boolean fly = mission != null && d.equals(mission.getDrone()) && animating;
+                gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9));
+                gc.setFill(fly ? COL_DRONE : Color.rgb(100, 200, 120));
+                gc.fillText((fly ? ">" : "*") + " " + d.getId()
+                        + "  " + (int) d.getBatteryLevel() + "%", x + 16, y + ly);
                 ly += 13;
             }
         }
     }
 
     private void drawSites(GraphicsContext gc) {
-        for (MedicalSite site : mapModel.getMedicalSites()) {
+        for (MedicalSite site : model.getMedicalSites()) {
             double x = site.getPosition().getX();
             double y = site.getPosition().getY();
-            boolean hov  = site.equals(hoveredSite);
-            boolean drag = site.equals(draggingSite);
-            double r = (hov || drag) ? 11 : 8;
+            boolean hov = site.equals(hovSite);
+            double r = hov ? 10 : 8;
+
             if (site instanceof Hospital) {
-                if (hov || drag) { gc.setFill(Color.rgb(30,210,100,0.20)); gc.fillOval(x-20,y-20,40,40); }
-                gc.setFill(drag ? DRAG_CLR : HOSPITAL_CLR);
-                gc.fillOval(x-r, y-r, r*2, r*2);
-                gc.setStroke(Color.WHITE); gc.setLineWidth(2 / scale);
-                gc.strokeLine(x-4, y, x+4, y); gc.strokeLine(x, y-4, x, y+4);
-                label(gc, "H  " + site.getName(), x+13, y+4);
+                if (hov) { gc.setFill(Color.rgb(30, 210, 100, 0.18)); gc.fillOval(x-18, y-18, 36, 36); }
+                gc.setFill(site.equals(dragSite) ? Color.YELLOW : COL_HOSP);
+                gc.fillOval(x - r, y - r, r * 2, r * 2);
+                gc.setStroke(Color.WHITE); gc.setLineWidth(1.8);
+                gc.strokeLine(x - 4, y, x + 4, y);
+                gc.strokeLine(x, y - 4, x, y + 4);
+                lbl(gc, "H  " + site.getName(), x + 12, y + 4);
+
             } else if (site instanceof CollectionCenter) {
-                if (hov || drag) { gc.setFill(Color.rgb(255,160,40,0.20)); gc.fillOval(x-20,y-20,40,40); }
-                gc.setFill(drag ? DRAG_CLR : CENTER_CLR);
-                gc.fillRect(x-r, y-r, r*2, r*2);
-                gc.setFill(Color.WHITE); gc.fillOval(x-3, y-3, 6, 6);
-                label(gc, "C  " + site.getName(), x+13, y+4);
+                if (hov) { gc.setFill(Color.rgb(255, 160, 40, 0.18)); gc.fillOval(x-18, y-18, 36, 36); }
+                gc.setFill(site.equals(dragSite) ? Color.YELLOW : COL_CENTER);
+                gc.fillRect(x - r, y - r, r * 2, r * 2);
+                gc.setFill(Color.WHITE); gc.fillOval(x - 3, y - 3, 6, 6);
+                lbl(gc, "C  " + site.getName(), x + 12, y + 4);
             }
         }
     }
 
-    private void drawTrail(GraphicsContext gc) {
-        for (int i = 0; i < trail.size(); i++) {
-            double alpha = (double) i / trail.size() * 0.38;
-            double size  = 4 + (double) i / trail.size() * 7;
-            gc.setFill(Color.rgb(255, 210, 50, alpha));
-            Position p = trail.get(i);
-            gc.fillOval(p.getX()-size/2, p.getY()-size/2, size, size);
-        }
+    /**
+     * Draws the animated drone moving along: base -> collection center -> hospital.
+     * Uses linear interpolation along the route path.
+     */
+    private void drawDrone(GraphicsContext gc) {
+        if (mission == null || cancelled) return;
+        if (!animating && animProgress <= 0) return;
+
+        Route route = mission.getRoute();
+        List<Position> path = new ArrayList<>();
+        if (droneStart != null) path.add(droneStart);
+        path.add(route.getOrigin().getPosition());
+        path.add(route.getDestination().getPosition());
+
+        Position pos = interpolate(path, animProgress);
+        if (pos == null) return;
+
+        mission.getDrone().updatePosition(pos);
+
+        // Simple drone icon: body + 4 arms + 4 rotors
+        double x = pos.getX(), y = pos.getY();
+        gc.setFill(COL_DRONE); gc.setStroke(COL_DRONE); gc.setLineWidth(2.0);
+        gc.fillOval(x - 5, y - 5, 10, 10);
+        gc.strokeLine(x, y, x - 10, y - 10); gc.strokeLine(x, y, x + 10, y - 10);
+        gc.strokeLine(x, y, x - 10, y + 10); gc.strokeLine(x, y, x + 10, y + 10);
+        gc.setFill(Color.rgb(255, 255, 255, 0.7));
+        gc.fillOval(x - 15, y - 15, 7, 7); gc.fillOval(x + 8, y - 15, 7, 7);
+        gc.fillOval(x - 15, y + 8, 7, 7);  gc.fillOval(x + 8, y + 8, 7, 7);
+
+        // Progress bar below drone
+        double bw = 50;
+        double bx = x - bw / 2, by = y + 22;
+        gc.setFill(Color.rgb(40, 50, 68)); gc.fillRoundRect(bx, by, bw, 5, 3, 3);
+        gc.setFill(COL_DRONE); gc.fillRoundRect(bx, by, bw * animProgress, 5, 3, 3);
+
+        lbl(gc, mission.getDrone().getId(), x + 14, y + 4);
     }
 
-    private void drawAnimDrone(GraphicsContext gc) {
-        if (currentMission == null || missionCancelled) return;
-        Route route = currentMission.getRoute();
-        Drone drone = currentMission.getDrone();
-        List<Position> path = new ArrayList<>();
-        if (droneBasePos != null) path.add(droneBasePos);
-        path.add(route.getOrigin().getPosition());
-        path.addAll(route.getWaypoints());
-        path.add(route.getDestination().getPosition());
-        if (missionCompleted) {
-            Position dest = route.getDestination().getPosition();
-            gc.setFill(Color.rgb(30,210,100,0.20));
-            gc.fillOval(dest.getX()-26, dest.getY()-26, 52, 52);
-            droneIcon(gc, dest.getX(), dest.getY(), DRONE_FLY, drone.getId() + " ✔", true);
-            return;
-        }
-        if (!animating && droneAnimProgress <= 0) return;
-        Position pos = interpolate(path, droneAnimProgress);
-        if (pos == null) return;
-        trail.add(new Position(pos.getX(), pos.getY()));
-        if (trail.size() > 20) trail.remove(0);
-        drone.updatePosition(pos);
-        gc.setFill(Color.rgb(255,220,60,0.15));
-        gc.fillOval(pos.getX()-24, pos.getY()-24, 48, 48);
-        droneIcon(gc, pos.getX(), pos.getY(), DRONE_FLY, drone.getId(), true);
-        double bw = 54, bx = pos.getX()-bw/2, by = pos.getY()+26;
-        gc.setFill(Color.rgb(40,50,68)); gc.fillRoundRect(bx, by, bw, 5, 3, 3);
-        gc.setFill(DRONE_FLY); gc.fillRoundRect(bx, by, bw*droneAnimProgress, 5, 3, 3);
-    }
+    // ── Screen-space overlays ─────────────────────────────────────────────────
 
     private void drawTimer(GraphicsContext gc) {
         if (!animating && elapsedSec <= 0) return;
-        double px = getWidth()-188, py = 12;
-        gc.setFill(PANEL_BG); gc.fillRoundRect(px-10, py-2, 182, 38, 8, 8);
-        gc.setStroke(DRONE_FLY); gc.setLineWidth(1);
-        gc.strokeRoundRect(px-10, py-2, 182, 38, 8, 8);
-        int min = (int)elapsedSec/60, sec = (int)elapsedSec%60;
-        int ds  = (int)((elapsedSec-(int)elapsedSec)*10);
-        gc.setFont(Font.font("Monospace", FontWeight.BOLD, 19));
-        gc.setFill(DRONE_FLY);
-        gc.fillText(String.format("✈  %02d:%02d.%d", min, sec, ds), px, py+26);
+        int min = (int) elapsedSec / 60;
+        int sec = (int) elapsedSec % 60;
+        int ds  = (int) ((elapsedSec - (int) elapsedSec) * 10);
+
+        double px = getWidth() - 185, py = 12;
+        gc.setFill(COL_PANEL); gc.fillRoundRect(px - 10, py - 2, 178, 36, 8, 8);
+        gc.setStroke(COL_DRONE); gc.setLineWidth(1); gc.strokeRoundRect(px - 10, py - 2, 178, 36, 8, 8);
+        gc.setFont(Font.font("Monospace", FontWeight.BOLD, 18));
+        gc.setFill(COL_DRONE);
+        gc.fillText(String.format("> %02d:%02d.%d", min, sec, ds), px, py + 24);
     }
 
-    /**
-     * Info panel for clicked site or base.
-     * If a user point is clicked, shows its nearest site info.
-     */
-    private void drawInfoPanel(GraphicsContext gc) {
-        // ── Base panel ────────────────────────────────────────────────────────
-        if (clickedBase != null) {
-            double pw = 235, py = animating ? 62 : 12;
-            double px = getWidth() - pw - 12;
-            int dc = clickedBase.getDrones().size();
-            double ph = 110 + dc * 18;
-            gc.setFill(PANEL_BG); gc.fillRoundRect(px, py, pw, ph, 12, 12);
-            gc.setStroke(BASE_CLR); gc.setLineWidth(1.8);
-            gc.strokeRoundRect(px, py, pw, ph, 12, 12);
-            gc.setFill(Color.rgb(180,190,210,0.18));
-            gc.fillRoundRect(px, py, pw, 28, 12, 12); gc.fillRect(px, py+16, pw, 12);
-            gc.setFont(Font.font("Monospace", FontWeight.BOLD, 11));
-            gc.setFill(BASE_CLR); gc.fillText("DRONE BASE", px+12, py+19);
-            gc.setFont(Font.font("Monospace", FontWeight.BOLD, 18));
-            gc.setFill(Color.WHITE); gc.fillText(clickedBase.getId(), px+12, py+52);
-            gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9));
-            gc.setFill(Color.rgb(160,180,210)); gc.fillText("ID", px+12, py+34);
-            gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 11));
-            gc.setFill(TEXT_CLR); gc.fillText(clickedBase.getName(), px+12, py+68);
-            gc.setFill(Color.rgb(140,160,190));
-            gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 10));
-            gc.fillText("X=" + (int)clickedBase.getPosition().getX()
-                    + "  Y=" + (int)clickedBase.getPosition().getY(), px+12, py+82);
-            gc.setStroke(Color.rgb(50,70,100)); gc.setLineWidth(1);
-            gc.strokeLine(px+8, py+90, px+pw-8, py+90);
-            gc.setFont(Font.font("Monospace", FontWeight.BOLD, 9));
-            gc.setFill(Color.rgb(100,140,180));
-            gc.fillText("DRONES (" + clickedBase.getAvailableDrones().size()
-                    + "/" + dc + " avail)", px+12, py+104);
-            int ly = 118;
-            for (Drone d : clickedBase.getDrones()) {
-                boolean inFlight = currentMission != null
-                        && d.equals(currentMission.getDrone())
-                        && (animating || missionCompleted);
-                String icon = inFlight ? "✈ " : (d.isAvailable() ? "● " : "✕ ");
-                Color dc2 = inFlight ? DRONE_FLY
-                        : d.isAvailable() ? Color.rgb(100,200,120) : Color.rgb(255,80,80);
-                gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 10));
-                gc.setFill(dc2);
-                gc.fillText(icon + d.getId() + "  bat=" + (int)d.getBatteryLevel()
-                        + "%  auto=" + (int)d.getAutonomy() + "km"
-                        + (inFlight ? "  [IN FLIGHT]" : ""), px+12, py+ly);
-                ly += 16;
-            }
-            return;
-        }
+    /** Info panel for the selected medical site. */
+    private void drawSitePanel(GraphicsContext gc) {
+        MedicalSite display = selSite != null ? selSite : hovSite;
+        if (display == null || selBase != null) return;
 
-        // ── User point panel ──────────────────────────────────────────────────
-        if (clickedUser != null) {
-            double pw = 230, ph = 120;
-            double px = getWidth() - pw - 12;
-            double py = animating ? 62 : 12;
-            gc.setFill(PANEL_BG); gc.fillRoundRect(px, py, pw, ph, 12, 12);
-            gc.setStroke(USERPT_CLR); gc.setLineWidth(1.8);
-            gc.strokeRoundRect(px, py, pw, ph, 12, 12);
-            gc.setFill(Color.rgb(200,100,255,0.18));
-            gc.fillRoundRect(px, py, pw, 28, 12, 12); gc.fillRect(px, py+16, pw, 12);
-            gc.setFont(Font.font("Monospace", FontWeight.BOLD, 11));
-            gc.setFill(USERPT_CLR); gc.fillText("USER POINT", px+12, py+19);
-            gc.setFont(Font.font("Monospace", FontWeight.BOLD, 18));
-            gc.setFill(Color.WHITE); gc.fillText(clickedUser.getId(), px+12, py+52);
-            gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9));
-            gc.setFill(Color.rgb(160,180,210)); gc.fillText("ID", px+12, py+34);
-            gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 10));
-            gc.setFill(Color.rgb(140,160,190));
-            gc.fillText("X=" + (int)clickedUser.getPosition().getX()
-                    + "  Y=" + (int)clickedUser.getPosition().getY(), px+12, py+68);
-            gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 11));
-            gc.setFill(TEXT_CLR);
-            String nearest = clickedUser.getNearestSite() != null
-                    ? clickedUser.getNearestSite().getName() : "None";
-            gc.fillText("Nearest: " + nearest, px+12, py+86);
-            gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9));
-            gc.setFill(Color.rgb(100,120,150));
-            gc.fillText("Neighbours highlighted  |  Drag to move", px+12, py+104);
-            return;
-        }
+        VoronoiCell cell  = model.getVoronoiDiagram().getCellBySite(display);
+        boolean isHosp    = display instanceof Hospital;
+        Color   typeColor = isHosp ? COL_HOSP : COL_CENTER;
+        String  typeLabel = isHosp ? "HOSPITAL" : "COLLECTION CENTER";
 
-        // ── Site panel ────────────────────────────────────────────────────────
-        MedicalSite display = (clickedSite != null) ? clickedSite : hoveredSite;
-        if (display == null) return;
-        VoronoiCell cell = mapModel.getVoronoiDiagram().getCellBySite(display);
-        boolean isHospital = display instanceof Hospital;
-        Color   typeColor  = isHospital ? HOSPITAL_CLR : CENTER_CLR;
-        String  typeLabel  = isHospital ? "HOSPITAL" : "COLLECTION CENTER";
-        double  pw = 230, ph = cell != null ? 188 : 118;
-        double  px = getWidth() - pw - 12;
-        double  py = animating ? 62 : 12;
-        gc.setFill(PANEL_BG); gc.fillRoundRect(px, py, pw, ph, 12, 12);
-        gc.setStroke(typeColor); gc.setLineWidth(1.8);
-        gc.strokeRoundRect(px, py, pw, ph, 12, 12);
-        gc.setFill(Color.rgb((int)(typeColor.getRed()*255),
-                (int)(typeColor.getGreen()*255),(int)(typeColor.getBlue()*255),0.18));
-        gc.fillRoundRect(px, py, pw, 28, 12, 12); gc.fillRect(px, py+16, pw, 12);
+        double pw = 230, ph = cell != null ? 185 : 110;
+        if (siteX < 0) siteX = getWidth() - pw - 12;
+        if (siteY < 0) siteY = animating ? 60 : 12;
+        siteX = Math.max(0, Math.min(siteX, getWidth()  - pw));
+        siteY = Math.max(0, Math.min(siteY, getHeight() - ph));
+        double px = siteX, py = siteY;
+
+        panel(gc, px, py, pw, ph, typeColor);
+
+        // Type header
         gc.setFont(Font.font("Monospace", FontWeight.BOLD, 11));
-        gc.setFill(typeColor); gc.fillText(typeLabel, px+12, py+19);
-        gc.setFont(Font.font("Monospace", FontWeight.BOLD, 22));
-        gc.setFill(Color.WHITE); gc.fillText(display.getId(), px+12, py+58);
+        gc.setFill(typeColor); gc.fillText(typeLabel, px + 12, py + 19);
+
+        // ID large
+        gc.setFont(Font.font("Monospace", FontWeight.BOLD, 20));
+        gc.setFill(Color.WHITE); gc.fillText(display.getId(), px + 12, py + 52);
         gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9));
-        gc.setFill(Color.rgb(160,180,210)); gc.fillText("ID", px+12, py+37);
+        gc.setFill(Color.rgb(160, 180, 210)); gc.fillText("ID", px + 12, py + 34);
+
+        // Name + coords
         gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 11));
-        gc.setFill(TEXT_CLR); gc.fillText(display.getName(), px+12, py+76);
-        gc.setFill(Color.rgb(140,160,190));
+        gc.setFill(COL_TEXT);
+        gc.fillText(display.getName(), px + 12, py + 70);
+        gc.setFill(Color.rgb(140, 160, 190));
         gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 10));
-        gc.fillText("X=" + (int)display.getPosition().getX()
-                + "  Y=" + (int)display.getPosition().getY(), px+12, py+92);
-        gc.setStroke(Color.rgb(50,70,100)); gc.setLineWidth(1);
-        gc.strokeLine(px+8, py+100, px+pw-8, py+100);
+        gc.fillText("X=" + (int) display.getPosition().getX()
+                + "  Y=" + (int) display.getPosition().getY(), px + 12, py + 84);
+
         if (cell != null) {
+            divider(gc, px, py + 92, pw);
             gc.setFont(Font.font("Monospace", FontWeight.BOLD, 9));
-            gc.setFill(Color.rgb(100,140,180)); gc.fillText("VORONOI ZONE", px+12, py+114);
+            gc.setFill(Color.rgb(100, 140, 180)); gc.fillText("VORONOI ZONE", px + 12, py + 106);
             gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 10));
-            gc.setFill(TEXT_CLR);
-            gc.fillText("Surface  : " + (int)cell.getSurface(),   px+12, py+130);
-            gc.fillText("UserPts  : " + cell.getNumberOfUserPoints(), px+12, py+145);
-            gc.fillText("Min dist : " + String.format("%.1f", cell.getMinDistanceToUserPoints()), px+12, py+160);
-            gc.fillText("Avg dist : " + String.format("%.1f", cell.getAverageDistanceToUserPoints()), px+12, py+175);
+            gc.setFill(COL_TEXT);
+            gc.fillText("Surface  : " + (int) cell.getSurface(), px + 12, py + 120);
+            gc.fillText("Doctors  : " + cell.getNumberOfUserPoints() + " in zone", px + 12, py + 134);
+            gc.fillText("Min dist : " + String.format("%.1f", cell.getMinDistanceToUserPoints()) + " (to doctors)", px + 12, py + 148);
+            gc.fillText("Avg dist : " + String.format("%.1f", cell.getAverageDistanceToUserPoints()) + " (to doctors)", px + 12, py + 162);
         }
-        if (clickedSite == null) {
+
+        if (selSite == null) {
             gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9));
-            gc.setFill(Color.rgb(100,120,150));
-            gc.fillText("Click to pin  |  Drag to move", px+12, py+ph-8);
+            gc.setFill(Color.rgb(100, 120, 150));
+            gc.fillText("Click to pin  |  Drag to move", px + 12, py + ph - 8);
         }
     }
 
-    /**
-     * Panel shown when a Delaunay triangle is selected.
-     * Shows: surface, distances AB/BC/CA, user points per vertex.
-     */
-    private void drawTrianglePanel(GraphicsContext gc) {
-        if (clickedTriangle == null) return;
+    /** Info panel for the selected drone base. */
+    private void drawBasePanel(GraphicsContext gc) {
+        if (selBase == null) return;
 
-        double pw = 270, ph = 200;
-        double px = 12;
-        double py = animating ? 62 : 12;
+        int  dc  = selBase.getDrones().size();
+        double pw = 235, ph = 106 + dc * 17;
+        if (baseX < 0) baseX = getWidth() - pw - 12;
+        if (baseY < 0) baseY = animating ? 60 : 12;
+        baseX = Math.max(0, Math.min(baseX, getWidth()  - pw));
+        baseY = Math.max(0, Math.min(baseY, getHeight() - ph));
+        double px = baseX, py = baseY;
 
-        gc.setFill(PANEL_BG); gc.fillRoundRect(px, py, pw, ph, 12, 12);
-        gc.setStroke(DELAUNAY_SEL); gc.setLineWidth(1.8);
-        gc.strokeRoundRect(px, py, pw, ph, 12, 12);
+        panel(gc, px, py, pw, ph, COL_BASE);
 
-        gc.setFill(Color.rgb(90,130,210,0.18));
-        gc.fillRoundRect(px, py, pw, 28, 12, 12); gc.fillRect(px, py+16, pw, 12);
         gc.setFont(Font.font("Monospace", FontWeight.BOLD, 11));
-        gc.setFill(DELAUNAY_SEL);
-        gc.fillText("DELAUNAY TRIANGLE", px+12, py+19);
+        gc.setFill(COL_BASE); gc.fillText("DRONE BASE", px + 12, py + 19);
+
+        gc.setFont(Font.font("Monospace", FontWeight.BOLD, 18));
+        gc.setFill(Color.WHITE); gc.fillText(selBase.getId(), px + 12, py + 52);
+        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9));
+        gc.setFill(Color.rgb(160, 180, 210)); gc.fillText("ID", px + 12, py + 34);
 
         gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 11));
-        gc.setFill(TEXT_CLR);
+        gc.setFill(COL_TEXT); gc.fillText(selBase.getName(), px + 12, py + 68);
+        gc.setFill(Color.rgb(140, 160, 190));
+        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 10));
+        gc.fillText("X=" + (int) selBase.getPosition().getX()
+                + "  Y=" + (int) selBase.getPosition().getY(), px + 12, py + 82);
+
+        divider(gc, px, py + 90, pw);
+
+        gc.setFont(Font.font("Monospace", FontWeight.BOLD, 9));
+        gc.setFill(Color.rgb(100, 140, 180));
+        gc.fillText("DRONES  (" + selBase.getAvailableDrones().size()
+                + "/" + dc + " available)", px + 12, py + 104);
+
+        int ly = 118;
+        for (Drone d : selBase.getDrones()) {
+            boolean fly = mission != null && d.equals(mission.getDrone()) && animating;
+            gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 10));
+            gc.setFill(fly ? COL_DRONE : d.isAvailable()
+                    ? Color.rgb(100, 200, 120) : Color.rgb(255, 80, 80));
+            gc.fillText((fly ? "> " : "* ") + d.getId()
+                    + "  bat=" + (int) d.getBatteryLevel() + "%"
+                    + "  auto=" + (int) d.getAutonomy() + "km"
+                    + (fly ? "  [FLYING]" : ""), px + 12, py + ly);
+            ly += 16;
+        }
+    }
+
+    /** Info panel for the selected Delaunay triangle. */
+    private void drawTrianglePanel(GraphicsContext gc) {
+        if (selTri == null) return;
+
+        double pw = 265, ph = 198;
+        if (triX < 0) triX = 12;
+        if (triY < 0) triY = animating ? 60 : 12;
+        triX = Math.max(0, Math.min(triX, getWidth()  - pw));
+        triY = Math.max(0, Math.min(triY, getHeight() - ph));
+        double px = triX, py = triY;
+
+        panel(gc, px, py, pw, ph, Color.rgb(90, 130, 210, 0.9));
+
+        gc.setFont(Font.font("Monospace", FontWeight.BOLD, 11));
+        gc.setFill(Color.rgb(90, 150, 255));
+        gc.fillText("DELAUNAY TRIANGLE", px + 12, py + 19);
 
         // Vertices
         gc.setFont(Font.font("Monospace", FontWeight.BOLD, 9));
-        gc.setFill(Color.rgb(100,140,180)); gc.fillText("VERTICES", px+12, py+42);
-        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 10)); gc.setFill(TEXT_CLR);
-        gc.fillText("A: " + clickedTriangle.getSiteA().getName(), px+12, py+56);
-        gc.fillText("B: " + clickedTriangle.getSiteB().getName(), px+12, py+70);
-        gc.fillText("C: " + clickedTriangle.getSiteC().getName(), px+12, py+84);
+        gc.setFill(Color.rgb(100, 140, 180)); gc.fillText("VERTICES", px + 12, py + 40);
+        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 10));
+        gc.setFill(COL_TEXT);
+        gc.fillText("A: " + selTri.getSiteA().getName(), px + 12, py + 54);
+        gc.fillText("B: " + selTri.getSiteB().getName(), px + 12, py + 68);
+        gc.fillText("C: " + selTri.getSiteC().getName(), px + 12, py + 82);
 
-        // Distances
-        gc.setStroke(Color.rgb(50,70,100)); gc.setLineWidth(1);
-        gc.strokeLine(px+8, py+92, px+pw-8, py+92);
+        divider(gc, px, py + 90, pw);
+
         gc.setFont(Font.font("Monospace", FontWeight.BOLD, 9));
-        gc.setFill(Color.rgb(100,140,180)); gc.fillText("DISTANCES", px+12, py+106);
-        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 10)); gc.setFill(TEXT_CLR);
-        gc.fillText("AB: " + String.format("%.1f", clickedTriangle.getDistanceAB()), px+12, py+120);
-        gc.fillText("BC: " + String.format("%.1f", clickedTriangle.getDistanceBC()), px+12, py+134);
-        gc.fillText("CA: " + String.format("%.1f", clickedTriangle.getDistanceCA()), px+12, py+148);
+        gc.setFill(Color.rgb(100, 140, 180)); gc.fillText("DISTANCES", px + 12, py + 104);
+        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 10));
+        gc.setFill(COL_TEXT);
+        gc.fillText("AB : " + fmt(selTri.getDistanceAB()), px + 12, py + 118);
+        gc.fillText("BC : " + fmt(selTri.getDistanceBC()), px + 12, py + 132);
+        gc.fillText("CA : " + fmt(selTri.getDistanceCA()), px + 12, py + 146);
 
-        // Surface
-        gc.strokeLine(px+8, py+155, px+pw-8, py+155);
+        divider(gc, px, py + 154, pw);
+
         gc.setFont(Font.font("Monospace", FontWeight.BOLD, 9));
-        gc.setFill(Color.rgb(100,140,180)); gc.fillText("SURFACE & USER POINTS", px+12, py+169);
-        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 10)); gc.setFill(TEXT_CLR);
-        gc.fillText("Surface : " + String.format("%.0f", clickedTriangle.computeSurface()), px+12, py+183);
+        gc.setFill(Color.rgb(100, 140, 180)); gc.fillText("STATS", px + 12, py + 168);
+        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 10));
+        gc.setFill(COL_TEXT);
+        gc.fillText("Surface  : " + fmt(selTri.computeSurface()), px + 12, py + 182);
 
-        // User points per vertex
-        int ua = userPointsInCell(clickedTriangle.getSiteA());
-        int ub = userPointsInCell(clickedTriangle.getSiteB());
-        int uc = userPointsInCell(clickedTriangle.getSiteC());
-        gc.fillText("UserPts  A=" + ua + "  B=" + ub + "  C=" + uc
-                + "  imbalance=" + Math.abs(ua-ub)+"/"+Math.abs(ub-uc), px+12, py+197);
-
-        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9));
-        gc.setFill(Color.rgb(100,120,150));
-        gc.fillText("Click elsewhere to deselect", px+12, py+ph-8);
+        int ua = doctorsInCell(selTri.getSiteA());
+        int ub = doctorsInCell(selTri.getSiteB());
+        int uc = doctorsInCell(selTri.getSiteC());
+        gc.fillText("Doctors  A=" + ua + " B=" + ub + " C=" + uc, px + 12, py + 196);
     }
 
+    /** Draggable stats panel. */
+    /**
+     * Draws the draggable stats panel with a max height of 420px.
+     * If content is taller, it is clipped (no overflow).
+     * Drag the header to move the panel anywhere on screen.
+     */
     private void drawStatsPanel(GraphicsContext gc) {
         if (statsText == null) return;
-        String[] statLines = statsText.split("\n");
-        double pw = 380, ph = 34 + statLines.length * 17 + 16;
-        if (statsPanelX < 0) statsPanelX = (getWidth()  - pw) / 2;
-        if (statsPanelY < 0) statsPanelY = (getHeight() - ph) / 2;
-        double px = statsPanelX;
-        double py = statsPanelY;
-        gc.setFill(Color.rgb(0,0,0,0.45));
-        gc.fillRoundRect(px+4, py+4, pw, ph, 14, 14);
-        gc.setFill(PANEL_BG); gc.fillRoundRect(px, py, pw, ph, 14, 14);
-        gc.setStroke(ACCENT); gc.setLineWidth(1.8);
-        gc.strokeRoundRect(px, py, pw, ph, 14, 14);
-        gc.setFill(Color.rgb(40,210,135,0.18));
-        gc.fillRoundRect(px, py, pw, 30, 14, 14);
-        gc.fillRect(px, py+18, pw, 12);
-        gc.setFont(Font.font("Monospace", FontWeight.BOLD, 12));
-        gc.setFill(ACCENT); gc.fillText("STATISTICS", px+14, py+20);
-        gc.setFont(Font.font("Monospace", FontWeight.BOLD, 13));
-        gc.setFill(Color.rgb(255,80,80));
-        gc.fillText("X", px+pw-24, py+20);
-        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9));
-        gc.setFill(Color.rgb(100,160,120));
-        gc.fillText("drag to move", px+110, py+20);
-        for (int i = 0; i < statLines.length; i++) {
-            String sl = statLines[i];
-            if (sl.startsWith("--") || sl.startsWith("==")) {
-                gc.setFill(Color.rgb(100,140,180));
-                gc.setFont(Font.font("Monospace", FontWeight.BOLD, 10));
-            } else {
-                gc.setFill(TEXT_CLR);
-                gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 11));
-            }
-            gc.fillText(sl, px+14, py+46 + i*17);
-        }
-    }
+        String[] lines = statsText.split("\\n");
 
-    /** Small zoom level indicator bottom-right. */
-    private void drawZoomIndicator(GraphicsContext gc) {
-        String txt = String.format("zoom: %.0f%%", scale * 100);
+        double pw      = 390;
+        double maxPh   = Math.min(getHeight() - 40, 420);  // max height
+        double fullPh  = 32 + lines.length * 16 + 14;
+        double ph      = Math.min(fullPh, maxPh);
+
+        // Default position: top-center
+        if (spX < 0) spX = (getWidth() - pw) / 2;
+        if (spY < 0) spY = 20;
+
+        // Keep panel inside window bounds
+        spX = Math.max(0, Math.min(spX, getWidth()  - pw));
+        spY = Math.max(0, Math.min(spY, getHeight() - ph));
+
+        // Shadow
+        gc.setFill(Color.rgb(0, 0, 0, 0.35));
+        gc.fillRoundRect(spX + 4, spY + 4, pw, ph, 12, 12);
+
+        panel(gc, spX, spY, pw, ph, COL_ACCENT);
+
+        // Header
+        gc.setFont(Font.font("Monospace", FontWeight.BOLD, 11));
+        gc.setFill(COL_ACCENT);
+        gc.fillText("STATISTICS", spX + 12, spY + 18);
+        gc.setFont(Font.font("Monospace", FontWeight.BOLD, 13));
+        gc.setFill(Color.rgb(255, 80, 80));
+        gc.fillText("X", spX + pw - 22, spY + 18);
         gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9));
-        gc.setFill(Color.rgb(80,100,130));
-        gc.fillText(txt, getWidth() - 90, getHeight() - 8);
+        gc.setFill(Color.rgb(100, 160, 120));
+        gc.fillText("drag to move", spX + 105, spY + 18);
+
+        // Clip content to panel bounds (avoid overflow)
+        gc.save();
+        gc.beginPath();
+        gc.rect(spX, spY + 26, pw, ph - 28);
+        gc.clip();
+
+        for (int i = 0; i < lines.length; i++) {
+            double ly = spY + 34 + i * 16;
+            if (ly > spY + ph) break;
+            boolean isHeader = lines[i].startsWith("--") || lines[i].startsWith("==");
+            gc.setFont(Font.font("Monospace",
+                    isHeader ? FontWeight.BOLD : FontWeight.NORMAL,
+                    isHeader ? 10 : 11));
+            gc.setFill(isHeader ? Color.rgb(100, 140, 180) : COL_TEXT);
+            gc.fillText(lines[i], spX + 12, ly);
+        }
+        gc.restore();
     }
 
     private void drawLegend(GraphicsContext gc) {
-        double x = 12, y = getHeight()-168;
-        gc.setFill(PANEL_BG); gc.fillRoundRect(x-8, y-18, 215, 158, 10, 10);
-        gc.setStroke(Color.rgb(80,120,180,0.35)); gc.setLineWidth(1);
-        gc.strokeRoundRect(x-8, y-18, 215, 158, 10, 10);
-        gc.setFont(Font.font("Monospace", FontWeight.BOLD, 11));
-        gc.setFill(ACCENT); gc.fillText("LEGEND", x, y);
-        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 11));
-        legendDot(gc, HOSPITAL_CLR, x, y+14); gc.setFill(TEXT_CLR); gc.fillText("Hospital",          x+18, y+23);
-        legendSqr(gc, CENTER_CLR,   x, y+32); gc.setFill(TEXT_CLR); gc.fillText("Collection Center", x+18, y+41);
-        legendHex(gc, BASE_CLR,     x, y+50); gc.setFill(TEXT_CLR); gc.fillText("Drone Base",         x+18, y+59);
-        legendDot(gc, DRONE_FLY,    x, y+68); gc.setFill(TEXT_CLR); gc.fillText("Drone (in flight)",  x+18, y+77);
-        legendDiamond(gc, USERPT_CLR, x, y+86); gc.setFill(TEXT_CLR); gc.fillText("User point",       x+18, y+95);
-        gc.setStroke(ROUTE_CLR); gc.setLineWidth(2); gc.setLineDashes(6,4);
-        gc.strokeLine(x, y+108, x+10, y+108); gc.setLineDashes((double[]) null);
-        gc.setFill(TEXT_CLR); gc.fillText("Mission route",  x+18, y+112);
-        gc.setStroke(DELAUNAY_CLR); gc.setLineWidth(1.5);
-        gc.strokeLine(x, y+126, x+10, y+126);
-        gc.setFill(TEXT_CLR); gc.fillText("Delaunay edge",  x+18, y+130);
-        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9));
-        gc.setFill(Color.rgb(80,100,130));
-        gc.fillText("Wheel=zoom  Mid-drag=pan", x, y+148);
-    }
+        double x = 12, y = getHeight() - 144;
+        gc.setFill(COL_PANEL); gc.fillRoundRect(x - 8, y - 18, 215, 134, 10, 10);
+        gc.setStroke(Color.rgb(80, 120, 180, 0.3)); gc.setLineWidth(1);
+        gc.strokeRoundRect(x - 8, y - 18, 215, 134, 10, 10);
 
-    private void drawDragHint(GraphicsContext gc) {
-        if (draggingSite != null || draggingBase != null || draggingUser != null) return;
-        if (clickedSite != null || clickedBase != null || clickedUser != null) return;
+        gc.setFont(Font.font("Monospace", FontWeight.BOLD, 11));
+        gc.setFill(COL_ACCENT); gc.fillText("LEGEND", x, y);
+        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 11));
+
+        dot(gc, COL_HOSP, x, y+14);  tf(gc, "Hospital",          x+18, y+23);
+        sqr(gc, COL_CENTER, x, y+32); tf(gc, "Collection Center", x+18, y+41);
+        hex(gc, COL_BASE, x, y+50);   tf(gc, "Drone Base",         x+18, y+59);
+        dot(gc, COL_DRONE, x, y+68);  tf(gc, "Drone (in flight)",  x+18, y+77);
+
+        gc.setStroke(COL_ROUTE); gc.setLineWidth(2); gc.setLineDashes(6, 4);
+        gc.strokeLine(x, y+108, x+10, y+108); gc.setLineDashes((double[]) null);
+        tf(gc, "Mission route", x+18, y+112);
+
+        gc.setStroke(COL_DEL); gc.setLineWidth(1.5);
+        gc.strokeLine(x, y+126, x+10, y+126);
+        tf(gc, "Delaunay edge", x+18, y+130);
+
         gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9));
         gc.setFill(Color.rgb(80, 100, 130));
-        gc.fillText("Click = info  |  Drag = move  |  Wheel = zoom  |  Middle-drag = pan",
-                14, getHeight() - 8);
+        gc.fillText("Wheel=zoom  Mid-drag=pan", x, y + 148);
+    }
+
+    private void drawHint(GraphicsContext gc) {
+        if (dragSite != null || dragBase != null) return;
+        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 9));
+        gc.setFill(Color.rgb(80, 100, 130));
+        gc.fillText("Click=info  Drag=move  Wheel=zoom  Mid-drag=pan  Click triangle centroid=inspect",
+                12, getHeight() - 8);
     }
 
     // ── Mouse ─────────────────────────────────────────────────────────────────
 
     private void setupMouse() {
-        // ── Zoom with mouse wheel ─────────────────────────────────────────────
+        // Zoom
         setOnScroll(e -> {
-            double zoomFactor = e.getDeltaY() > 0 ? 1.1 : 0.9;
-            double mx = e.getX(), my = e.getY();
-            // Zoom centered on cursor
-            double newScale = Math.max(0.2, Math.min(5.0, scale * zoomFactor));
-            offsetX = mx - (mx - offsetX) * (newScale / scale);
-            offsetY = my - (my - offsetY) * (newScale / scale);
-            scale = newScale;
-            draw();
+            double f  = e.getDeltaY() > 0 ? 1.1 : 0.9;
+            double ns = Math.max(0.2, Math.min(5.0, scale * f));
+            offX = e.getX() - (e.getX() - offX) * (ns / scale);
+            offY = e.getY() - (e.getY() - offY) * (ns / scale);
+            scale = ns; draw();
         });
 
-        // ── Hover ─────────────────────────────────────────────────────────────
+        // Hover
         setOnMouseMoved(e -> {
-            double mx = toModelX(e.getX()), my = toModelY(e.getY());
-            MedicalSite f = siteAt(mx, my);
-            if (f != hoveredSite) {
-                hoveredSite  = f;
-                selectedCell = f != null ? mapModel.getVoronoiDiagram().getCellBySite(f) : null;
+            MedicalSite f    = siteAt(toMX(e.getX()), toMY(e.getY()));
+            VoronoiCell cell = f != null
+                    ? model.getVoronoiDiagram().getCellBySite(f) : null;
+            if (f != hovSite || cell != hovCell) {
+                hovSite = f;
+                hovCell = cell;
                 draw();
             }
         });
 
-        // ── Press ─────────────────────────────────────────────────────────────
+        // Press
         setOnMousePressed(e -> {
             didDrag = false;
             double sx = e.getX(), sy = e.getY();
-            double mx = toModelX(sx), my = toModelY(sy);
+            double mx = toMX(sx), my = toMY(sy);
 
-            // Middle or secondary button → start pan
             if (e.isMiddleButtonDown() || e.isSecondaryButtonDown()) {
-                panning = true; panStartX = sx; panStartY = sy; return;
+                panning = true; panX = sx; panY = sy; return;
+            }
+            if (statsText != null && closeX(sx, sy)) {
+                statsText = null; draw(); return;
+            }
+            if (statsText != null && statsHeader(sx, sy)) {
+                dragStats = true; dspX = sx - spX; dspY = sy - spY; return;
+            }
+            // Drag site panel
+            if ((selSite != null || hovSite != null) && isPanelHeader(sx, sy, siteX, siteY, 230)) {
+                dragSiteP = true; dspX = sx - siteX; dspY = sy - siteY; return;
+            }
+            // Drag base panel
+            if (selBase != null && isPanelHeader(sx, sy, baseX, baseY, 235)) {
+                dragBaseP = true; dspX = sx - baseX; dspY = sy - baseY; return;
+            }
+            // Drag triangle panel
+            if (selTri != null && isPanelHeader(sx, sy, triX, triY, 265)) {
+                dragTriP = true; dspX = sx - triX; dspY = sy - triY; return;
             }
 
-            // Stats close X
-            if (statsText != null && isCloseX(sx, sy)) {
-                statsText = null; statsPanelX = -1; statsPanelY = -1; draw(); return;
-            }
-
-            // Drag stats panel (click on header area)
-            if (statsText != null && isStatsHeader(sx, sy)) {
-                draggingStats = true;
-                statsDragOffX = sx - statsPanelX;
-                statsDragOffY = sy - statsPanelY;
-                return;
-            }
-
-            // Try drag site
             MedicalSite site = siteAt(mx, my);
-            if (site != null) {
-                draggingSite = site;
-                dragOffsetX  = mx - site.getPosition().getX();
-                dragOffsetY  = my - site.getPosition().getY();
-                return;
-            }
-            // Try drag base
+            if (site != null) { dragSite = site; dox = mx - site.getPosition().getX(); doy = my - site.getPosition().getY(); return; }
+
             DroneBase base = baseAt(mx, my);
-            if (base != null) {
-                draggingBase = base;
-                dragOffsetX  = mx - base.getPosition().getX();
-                dragOffsetY  = my - base.getPosition().getY();
-                return;
-            }
-            // Try drag user point
-            UserPoint up = userPointAt(mx, my);
-            if (up != null) {
-                draggingUser = up;
-                dragOffsetX  = mx - up.getPosition().getX();
-                dragOffsetY  = my - up.getPosition().getY();
-            }
+            if (base != null) { dragBase = base; dox = mx - base.getPosition().getX(); doy = my - base.getPosition().getY(); return; }
+
         });
 
-        // ── Drag ─────────────────────────────────────────────────────────────
+        // Drag
         setOnMouseDragged(e -> {
             double sx = e.getX(), sy = e.getY();
-            double mx = toModelX(sx), my = toModelY(sy);
-
-            if (panning) {
-                offsetX += sx - panStartX;
-                offsetY += sy - panStartY;
-                panStartX = sx; panStartY = sy;
-                draw(); return;
-            }
-
-            if (draggingStats) {
-                statsPanelX = sx - statsDragOffX;
-                statsPanelY = sy - statsDragOffY;
-                draw(); return;
-            }
-
+            if (panning) { offX += sx - panX; offY += sy - panY; panX = sx; panY = sy; draw(); return; }
+            if (dragStats)  { spX   = sx - dspX; spY   = sy - dspY; draw(); return; }
+            if (dragSiteP)  { siteX = sx - dspX; siteY = sy - dspY; draw(); return; }
+            if (dragBaseP)  { baseX = sx - dspX; baseY = sy - dspY; draw(); return; }
+            if (dragTriP)   { triX  = sx - dspX; triY  = sy - dspY; draw(); return; }
             didDrag = true;
-            if (draggingSite != null) {
-                mapModel.moveMedicalSite(draggingSite,
-                        new Position(mx - dragOffsetX, my - dragOffsetY));
-                draw();
-            } else if (draggingBase != null) {
-                draggingBase.getPosition().setX(mx - dragOffsetX);
-                draggingBase.getPosition().setY(my - dragOffsetY);
-                draw();
-            } else if (draggingUser != null) {
-                mapModel.moveUserPoint(draggingUser,
-                        new Position(mx - dragOffsetX, my - dragOffsetY));
-                draw();
-            }
+            double mx = toMX(sx), my = toMY(sy);
+            if (dragSite != null) { model.moveMedicalSite(dragSite, new Position(mx - dox, my - doy)); draw(); }
+            else if (dragBase != null) { dragBase.getPosition().setX(mx - dox); dragBase.getPosition().setY(my - doy); draw(); }
         });
 
-        // ── Release ───────────────────────────────────────────────────────────
+        // Release
         setOnMouseReleased(e -> {
-            if (panning) { panning = false; return; }
-            if (draggingStats) { draggingStats = false; return; }
-            boolean wasDragging = draggingSite != null
-                    || draggingBase != null || draggingUser != null;
-            draggingSite = null; draggingBase = null; draggingUser = null;
-            if (!didDrag) handleClick(e.getX(), e.getY());
-            didDrag = false;
-            draw();
+            if (panning)   { panning = false; return; }
+            if (dragStats  || dragSiteP || dragBaseP || dragTriP) {
+                dragStats = false; dragSiteP = false;
+                dragBaseP = false; dragTriP  = false;
+                return;
+            }
+            boolean wasDrag = dragSite != null || dragBase != null;
+            dragSite = null; dragBase = null;
+            if (!didDrag) click(e.getX(), e.getY());
+            didDrag = false; draw();
         });
     }
 
-    private void handleClick(double sx, double sy) {
-        double mx = toModelX(sx), my = toModelY(sy);
+    private void click(double sx, double sy) {
+        double mx = toMX(sx), my = toMY(sy);
 
-        if (statsText != null && isCloseX(sx, sy)) {
-            statsText = null; statsPanelX = -1; statsPanelY = -1; draw(); return;
-        }
-        if (statsText != null && !isInsideStatsPanel(sx, sy)) {
-            statsText = null; statsPanelX = -1; statsPanelY = -1;
-        }
+        if (statsText != null && closeX(sx, sy)) { statsText = null; draw(); return; }
+        if (statsText != null && !insideStats(sx, sy)) { statsText = null; }
 
-        // Priority: site > base > user point > triangle > empty
         MedicalSite site = siteAt(mx, my);
         if (site != null) {
-            clickedBase = null; clickedUser = null; clickedTriangle = null;
-            neighbourCells.clear();
-            clickedSite  = site.equals(clickedSite) ? null : site;
-            selectedCell = clickedSite != null
-                    ? mapModel.getVoronoiDiagram().getCellBySite(clickedSite) : null;
-            hoveredSite = site; draw(); return;
+            selBase = null; selTri = null;
+            selSite = site.equals(selSite) ? null : site;
+            selCell = selSite != null ? model.getVoronoiDiagram().getCellBySite(selSite) : null;
+            if (selSite != null) { siteX = -1; siteY = -1; } // reset to default pos
+            hovSite = site; draw(); return;
         }
 
         DroneBase base = baseAt(mx, my);
         if (base != null) {
-            clickedSite = null; selectedCell = null;
-            clickedUser = null; clickedTriangle = null; neighbourCells.clear();
-            clickedBase = base.equals(clickedBase) ? null : base;
+            selSite = null; selCell = null; selTri = null;
+            selBase = base.equals(selBase) ? null : base;
+            if (selBase != null) { baseX = -1; baseY = -1; }
             draw(); return;
         }
 
-        UserPoint up = userPointAt(mx, my);
-        if (up != null) {
-            clickedSite = null; selectedCell = null; clickedBase = null; clickedTriangle = null;
-            if (up.equals(clickedUser)) {
-                clickedUser = null; neighbourCells.clear();
-            } else {
-                clickedUser = up;
-                neighbourCells = getNeighbourCells(up);
-            }
-            draw(); return;
-        }
 
-        // Try triangle click
-        Triangle tri = triangleAt(mx, my);
+        Triangle tri = triAt(mx, my);
         if (tri != null) {
-            clickedSite = null; selectedCell = null;
-            clickedBase = null; clickedUser = null; neighbourCells.clear();
-            clickedTriangle = tri.equals(clickedTriangle) ? null : tri;
+            selSite = null; selCell = null; selBase = null;
+            selTri = tri.equals(selTri) ? null : tri;
+            if (selTri != null) { triX = -1; triY = -1; }
             draw(); return;
         }
 
-        // Click in empty area → deselect all
-        clickedSite = null; selectedCell = null; clickedBase = null;
-        clickedUser = null; neighbourCells.clear(); clickedTriangle = null;
+        selSite = null; selCell = null; selBase = null;
+        selTri = null;
         draw();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /**
-     * Returns the cells that are neighbours of the given user point's zone
-     * (all cells adjacent to cells in the triangulation that contain the nearest site).
-     */
-    private List<VoronoiCell> getNeighbourCells(UserPoint up) {
-        List<VoronoiCell> result = new ArrayList<>();
-        if (up.getNearestSite() == null) return result;
-        List<VoronoiCell> cells = mapModel.getVoronoiDiagram().getCells();
-        // Find the triangles that contain the nearest site
-        for (Triangle t : mapModel.getDelaunayTriangulation().getTriangles()) {
-            if (t.containsSite(up.getNearestSite())) {
-                for (model.MedicalSite s : t.getSites()) {
-                    VoronoiCell c = mapModel.getVoronoiDiagram().getCellBySite(s);
-                    if (c != null && !result.contains(c)) result.add(c);
-                }
-            }
-        }
-        return result;
-    }
-
-    /** Returns number of user points in the Voronoi cell of the given site. */
-    private int userPointsInCell(MedicalSite site) {
-        VoronoiCell cell = mapModel.getVoronoiDiagram().getCellBySite(site);
-        return cell != null ? cell.getNumberOfUserPoints() : 0;
-    }
-
-    /**
-     * Returns the triangle whose centroid is closest to (mx,my) within 30px.
-     */
-    private Triangle triangleAt(double mx, double my) {
-        Triangle best = null; double bestDist = 30;
-        for (Triangle t : mapModel.getDelaunayTriangulation().getTriangles()) {
-            double cx = (t.getSiteA().getPosition().getX()
-                    + t.getSiteB().getPosition().getX()
-                    + t.getSiteC().getPosition().getX()) / 3.0;
-            double cy = (t.getSiteA().getPosition().getY()
-                    + t.getSiteB().getPosition().getY()
-                    + t.getSiteC().getPosition().getY()) / 3.0;
-            double d = Math.sqrt((cx-mx)*(cx-mx)+(cy-my)*(cy-my));
-            if (d < bestDist) { bestDist = d; best = t; }
-        }
-        return best;
-    }
-
-    private boolean isStatsHeader(double sx, double sy) {
-        if (statsText == null || statsPanelX < 0) return false;
-        String[] sl = statsText.split("\n");
-        double pw = 380;
-        return sx >= statsPanelX && sx <= statsPanelX + pw - 30
-                && sy >= statsPanelY && sy <= statsPanelY + 30;
-    }
-
-    private boolean isCloseX(double sx, double sy) {
-        if (statsText == null || statsPanelX < 0) return false;
-        String[] sl = statsText.split("\n");
-        double pw = 380;
-        return sx >= statsPanelX+pw-32 && sx <= statsPanelX+pw-8
-                && sy >= statsPanelY+4    && sy <= statsPanelY+28;
-    }
-
-    private boolean isInsideStatsPanel(double sx, double sy) {
-        if (statsText == null || statsPanelX < 0) return false;
-        String[] sl = statsText.split("\n");
-        double pw = 380, ph = 34 + sl.length*17 + 16;
-        return sx >= statsPanelX && sx <= statsPanelX+pw
-                && sy >= statsPanelY && sy <= statsPanelY+ph;
-    }
-
-    private Position findBasePosition(Drone drone) {
-        for (DroneBase base : mapModel.getDroneBases())
-            for (Drone d : base.getDrones())
-                if (d.equals(drone))
-                    return new Position(base.getPosition().getX(), base.getPosition().getY());
-        return null;
-    }
-
-    private void stopAnimation() {
-        if (animationTimer != null) { animationTimer.stop(); animationTimer = null; }
-        animating = false;
-    }
+    private double toMX(double sx) { return (sx - offX) / scale; }
+    private double toMY(double sy) { return (sy - offY) / scale; }
 
     private MedicalSite siteAt(double mx, double my) {
-        for (MedicalSite s : mapModel.getMedicalSites()) {
-            double dx = s.getPosition().getX()-mx, dy = s.getPosition().getY()-my;
-            if (Math.sqrt(dx*dx+dy*dy) < 14) return s;
+        for (MedicalSite s : model.getMedicalSites()) {
+            double dx = s.getPosition().getX() - mx, dy = s.getPosition().getY() - my;
+            if (Math.sqrt(dx*dx + dy*dy) < 14) return s;
         }
         return null;
     }
 
     private DroneBase baseAt(double mx, double my) {
-        for (DroneBase b : mapModel.getDroneBases()) {
-            double dx = b.getPosition().getX()-mx, dy = b.getPosition().getY()-my;
-            if (Math.sqrt(dx*dx+dy*dy) < 16) return b;
+        for (DroneBase b : model.getDroneBases()) {
+            double dx = b.getPosition().getX() - mx, dy = b.getPosition().getY() - my;
+            if (Math.sqrt(dx*dx + dy*dy) < 16) return b;
         }
         return null;
     }
 
-    private UserPoint userPointAt(double mx, double my) {
-        for (UserPoint up : mapModel.getUserPoints()) {
-            double dx = up.getPosition().getX()-mx, dy = up.getPosition().getY()-my;
-            if (Math.sqrt(dx*dx+dy*dy) < 10) return up;
+
+    private Triangle triAt(double mx, double my) {
+        Triangle best = null; double bd = 28;
+        for (Triangle t : model.getDelaunayTriangulation().getTriangles()) {
+            double cx = (t.getSiteA().getPosition().getX() + t.getSiteB().getPosition().getX() + t.getSiteC().getPosition().getX()) / 3;
+            double cy = (t.getSiteA().getPosition().getY() + t.getSiteB().getPosition().getY() + t.getSiteC().getPosition().getY()) / 3;
+            double d  = Math.sqrt((cx-mx)*(cx-mx) + (cy-my)*(cy-my));
+            if (d < bd) { bd = d; best = t; }
         }
-        return null;
+        return best;
     }
 
-    private void droneIcon(GraphicsContext gc, double x, double y,
-                           Color color, String id, boolean flying) {
-        double s = flying ? 1.45 : 1.0;
-        gc.setFill(color); gc.setStroke(color);
-        gc.setLineWidth((flying ? 2.4 : 1.8) / scale);
-        gc.fillOval(x-5*s, y-5*s, 10*s, 10*s);
-        gc.strokeLine(x, y, x-11*s, y-11*s); gc.strokeLine(x, y, x+11*s, y-11*s);
-        gc.strokeLine(x, y, x-11*s, y+11*s); gc.strokeLine(x, y, x+11*s, y+11*s);
-        gc.setFill(Color.rgb(255,255,255, flying ? 0.82 : 0.45));
-        double rs = 4.5*s;
-        gc.fillOval(x-14*s-rs, y-14*s-rs, rs*2, rs*2);
-        gc.fillOval(x+14*s-rs, y-14*s-rs, rs*2, rs*2);
-        gc.fillOval(x-14*s-rs, y+14*s-rs, rs*2, rs*2);
-        gc.fillOval(x+14*s-rs, y+14*s-rs, rs*2, rs*2);
-        label(gc, id, x+16*s, y+5);
+
+    private int doctorsInCell(MedicalSite site) {
+        VoronoiCell c = model.getVoronoiDiagram().getCellBySite(site);
+        return c != null ? c.getNumberOfUserPoints() : 0;
+    }
+
+    private Position basePos(Drone drone) {
+        for (DroneBase b : model.getDroneBases())
+            for (Drone d : b.getDrones())
+                if (d.equals(drone)) return new Position(b.getPosition().getX(), b.getPosition().getY());
+        return null;
     }
 
     private Position interpolate(List<Position> path, double t) {
@@ -1035,36 +860,75 @@ public class MapCanvas extends Canvas {
         if (total == 0) return null;
         double target = t * total, walked = 0;
         for (int i = 0; i < path.size()-1; i++) {
-            Position from = path.get(i), to = path.get(i+1);
-            double seg = from.distanceTo(to);
+            Position f = path.get(i), to = path.get(i+1);
+            double seg = f.distanceTo(to);
             if (walked + seg >= target) {
                 double u = (target - walked) / seg;
-                return new Position(from.getX()+u*(to.getX()-from.getX()),
-                        from.getY()+u*(to.getY()-from.getY()));
+                return new Position(f.getX() + u*(to.getX()-f.getX()), f.getY() + u*(to.getY()-f.getY()));
             }
             walked += seg;
         }
         return path.get(path.size()-1);
     }
 
-    private void label(GraphicsContext gc, String t, double x, double y) {
-        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, Math.max(8, 11 / scale)));
-        gc.setFill(Color.rgb(0,0,0,0.55)); gc.fillText(t, x+1, y+1);
-        gc.setFill(TEXT_CLR);              gc.fillText(t, x,   y);
+    private void stopAnim() {
+        if (timer != null) { timer.stop(); timer = null; }
+        animating = false;
     }
 
-    private void dot(GraphicsContext gc, Color c, double cx, double cy, double r)
-    { gc.setFill(c); gc.fillOval(cx-r, cy-r, r*2, r*2); }
-    private void legendDot(GraphicsContext gc, Color c, double x, double y)
-    { gc.setFill(c); gc.fillOval(x, y, 10, 10); }
-    private void legendSqr(GraphicsContext gc, Color c, double x, double y)
-    { gc.setFill(c); gc.fillRect(x, y, 10, 10); }
-    private void legendDiamond(GraphicsContext gc, Color c, double x, double y) {
-        gc.setFill(c);
-        double cx = x+5, cy = y+5;
-        gc.fillPolygon(new double[]{cx,cx+5,cx,cx-5}, new double[]{cy-5,cy,cy+5,cy}, 4);
+    // Stats panel helpers
+    private boolean statsHeader(double sx, double sy) {
+        if (statsText == null || spX < 0) return false;
+        return sx >= spX && sx <= spX + 340 && sy >= spY && sy <= spY + 26;
     }
-    private void legendHex(GraphicsContext gc, Color c, double x, double y) {
+    /**
+     * Returns true if (sx, sy) is inside the draggable header area
+     * of a panel positioned at (px, py) with the given width.
+     */
+    private boolean isPanelHeader(double sx, double sy,
+                                  double px, double py, double pw) {
+        if (px < 0) return false;
+        return sx >= px && sx <= px + pw && sy >= py && sy <= py + 28;
+    }
+
+    private boolean closeX(double sx, double sy) {
+        if (statsText == null || spX < 0) return false;
+        String[] l = statsText.split("\\n");
+        double pw = 370;
+        return sx >= spX + pw - 28 && sx <= spX + pw - 6 && sy >= spY + 4 && sy <= spY + 26;
+    }
+    private boolean insideStats(double sx, double sy) {
+        if (statsText == null || spX < 0) return false;
+        String[] l = statsText.split("\\n");
+        double pw = 370, ph = 32 + l.length * 16 + 14;
+        return sx >= spX && sx <= spX + pw && sy >= spY && sy <= spY + ph;
+    }
+
+    // Draw helpers
+    private void panel(GraphicsContext gc, double px, double py, double pw, double ph, Color border) {
+        gc.setFill(COL_PANEL); gc.fillRoundRect(px, py, pw, ph, 12, 12);
+        gc.setStroke(border); gc.setLineWidth(1.5); gc.strokeRoundRect(px, py, pw, ph, 12, 12);
+        // Header band
+        gc.setFill(Color.rgb((int)(border.getRed()*255),(int)(border.getGreen()*255),(int)(border.getBlue()*255),0.16));
+        gc.fillRoundRect(px, py, pw, 28, 12, 12); gc.fillRect(px, py+16, pw, 12);
+    }
+    private void divider(GraphicsContext gc, double px, double y, double pw) {
+        gc.setStroke(Color.rgb(50, 70, 100)); gc.setLineWidth(1);
+        gc.strokeLine(px + 8, y, px + pw - 8, y);
+    }
+    private void lbl(GraphicsContext gc, String t, double x, double y) {
+        gc.setFont(Font.font("Monospace", FontWeight.NORMAL, 11));
+        gc.setFill(Color.rgb(0,0,0,0.5)); gc.fillText(t, x+1, y+1);
+        gc.setFill(COL_TEXT); gc.fillText(t, x, y);
+    }
+    private void tf(GraphicsContext gc, String t, double x, double y)
+    { gc.setFill(COL_TEXT); gc.fillText(t, x, y); }
+    private String fmt(double v) { return String.format("%.1f", v); }
+    private void dot(GraphicsContext gc, Color c, double x, double y)
+    { gc.setFill(c); gc.fillOval(x, y, 10, 10); }
+    private void sqr(GraphicsContext gc, Color c, double x, double y)
+    { gc.setFill(c); gc.fillRect(x, y, 10, 10); }
+    private void hex(GraphicsContext gc, Color c, double x, double y) {
         gc.setFill(c);
         double cx = x+5, cy = y+5;
         gc.fillPolygon(new double[]{cx,cx-5,cx-5,cx,cx+5,cx+5},

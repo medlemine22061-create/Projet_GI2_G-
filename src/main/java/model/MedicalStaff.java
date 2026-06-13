@@ -74,6 +74,42 @@ public class MedicalStaff implements Serializable {
         mission.confirmReception(this);
     }
 
+    /**
+     * Returns the unique identifier of this staff member.
+     *
+     * @return staff ID
+     */
+    public String getId() {
+        return id;
+    }
+
+    /**
+     * Returns the first name.
+     *
+     * @return first name
+     */
+    public String getFirstName() {
+        return firstName;
+    }
+
+    /**
+     * Returns the last name.
+     *
+     * @return last name
+     */
+    public String getLastName() {
+        return lastName;
+    }
+
+    /**
+     * Returns the phone number.
+     *
+     * @return phone number
+     */
+    public String getPhoneNumber() {
+        return phoneNumber;
+    }
+
     public String getFullName() {
         return firstName + " " + lastName;
     }

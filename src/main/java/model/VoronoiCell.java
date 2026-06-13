@@ -26,6 +26,11 @@ public class VoronoiCell implements Serializable {
         this.density = 0.0;
     }
 
+    /**
+     * Adds a grid point to this Voronoi cell.
+     *
+     * @param position grid point belonging to this cell
+     */
     public void addPoint(Position position) {
         if (position != null) {
             points.add(position);
@@ -36,16 +41,30 @@ public class VoronoiCell implements Serializable {
         addPoint(position);
     }
 
+    /**
+     * Assigns a user point (doctor) to this Voronoi cell.
+     *
+     * @param userPoint user point to add
+     */
     public void addUserPoint(UserPoint userPoint) {
         if (userPoint != null) {
             userPoints.add(userPoint);
         }
     }
 
+    /**
+     * Clears all user points from this cell before recomputation.
+     */
     public void resetUserPoints() {
         userPoints.clear();
     }
 
+    /**
+     * Checks whether a position belongs to this Voronoi cell.
+     *
+     * @param position position to test
+     * @return true if the position is in this cell
+     */
     public boolean contains(Position position) {
         if (position == null) {
             return false;
@@ -69,6 +88,11 @@ public class VoronoiCell implements Serializable {
         return surface;
     }
 
+    /**
+     * Computes the density of this cell as user points per surface unit.
+     *
+     * @return density value
+     */
     public double computeDensity() {
         if (surface <= 0) {
             density = 0.0;

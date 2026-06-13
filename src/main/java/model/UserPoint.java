@@ -15,15 +15,33 @@ public class UserPoint implements Serializable {
     private Position position;
     private MedicalSite nearestSite;
 
+    /**
+     * Creates a user point (doctor) on the map.
+     * In this project, each user point represents a medical doctor
+     * who can issue delivery requests from their hospital.
+     *
+     * @param id       unique identifier (e.g. "DOC-M1")
+     * @param position position on the map (same as the doctor's hospital)
+     */
     public UserPoint(String id, Position position) {
         this.id = Objects.requireNonNull(id, "id cannot be null");
         this.position = Objects.requireNonNull(position, "position cannot be null");
     }
 
+    /**
+     * Updates the current position of the drone.
+     *
+     * @param position new position
+     */
     public void updatePosition(Position position) {
         this.position = Objects.requireNonNull(position, "position cannot be null");
     }
 
+    /**
+     * Assigns the nearest medical site to this user point (computed by Voronoi).
+     *
+     * @param nearestSite nearest site
+     */
     public void assignNearestSite(MedicalSite nearestSite) {
         this.nearestSite = nearestSite;
     }

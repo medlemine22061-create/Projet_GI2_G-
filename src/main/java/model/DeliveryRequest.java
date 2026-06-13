@@ -69,6 +69,11 @@ public class DeliveryRequest implements Serializable {
         this.status = Objects.requireNonNull(status, "status cannot be null");
     }
 
+    /**
+     * Returns the unique mission identifier.
+     *
+     * @return mission ID
+     */
     public String getId() {
         return id;
     }
@@ -77,26 +82,56 @@ public class DeliveryRequest implements Serializable {
         return organType;
     }
 
+    /**
+     * Returns the priority level of the associated request.
+     *
+     * @return priority level
+     */
     public PriorityLevel getPriorityLevel() {
         return priorityLevel;
     }
 
+    /**
+     * Returns the date and time when the request was created.
+     *
+     * @return request creation date
+     */
     public LocalDateTime getRequestDate() {
         return requestDate;
     }
 
+    /**
+     * Returns the current status of the request.
+     *
+     * @return request status
+     */
     public RequestStatus getStatus() {
         return status;
     }
 
+    /**
+     * Returns the collection center where the organ is available.
+     *
+     * @return origin collection center
+     */
     public CollectionCenter getOrigin() {
         return origin;
     }
 
+    /**
+     * Returns the destination hospital.
+     *
+     * @return destination hospital
+     */
     public Hospital getDestination() {
         return destination;
     }
 
+    /**
+     * Returns the medical staff member who created the request.
+     *
+     * @return requesting doctor
+     */
     public MedicalStaff getCreatedBy() {
         return createdBy;
     }

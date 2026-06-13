@@ -18,6 +18,7 @@ public class MapModel implements Serializable {
     private final List<UserPoint> userPoints;
     private final List<DroneBase> droneBases;
     private final List<Drone> drones;
+    private final List<MedicalStaff> medicalStaffList;
 
     private final VoronoiDiagram voronoiDiagram;
     private final DelaunayTriangulation delaunayTriangulation;
@@ -27,6 +28,7 @@ public class MapModel implements Serializable {
         this.userPoints = new ArrayList<>();
         this.droneBases = new ArrayList<>();
         this.drones = new ArrayList<>();
+        this.medicalStaffList = new ArrayList<>();
         this.voronoiDiagram = new VoronoiDiagram();
         this.delaunayTriangulation = new DelaunayTriangulation();
     }
@@ -105,6 +107,73 @@ public class MapModel implements Serializable {
 
     public void removeDrone(Drone drone) {
         drones.remove(drone);
+    }
+
+    // ── Medical Staff (doctors) ───────────────────────────────────────────────
+
+    /**
+     * Adds a medical staff member and registers them as a UserPoint
+     * at their hospital position, so Voronoi statistics count them.
+     *
+     * @param staff the medical staff member to add
+     */
+    public void addMedicalStaff(MedicalStaff staff) {
+        medicalStaffList.add(java.util.Objects.requireNonNull(staff, "staff cannot be null"));
+        // Each doctor = one UserPoint at their hospital position
+        UserPoint up = new UserPoint(
+                "DOC-" + staff.getId(),
+                new Position(
+                        staff.getHospital().getPosition().getX(),
+                        staff.getHospital().getPosition().getY()
+                )
+        );
+        addUserPoint(up);
+    }
+
+    /**
+     * Removes a medical staff member and their associated UserPoint.
+     *
+     * @param staff the medical staff member to remove
+     */
+    public void removeMedicalStaff(MedicalStaff staff) {
+        medicalStaffList.remove(staff);
+        // Remove associated UserPoint
+        UserPoint toRemove = findUserPointById("DOC-" + staff.getId());
+        if (toRemove != null) removeUserPoint(toRemove);
+    }
+
+    /**
+     * Returns all medical staff members working at a given hospital.
+     *
+     * @param hospital the hospital to filter by
+     * @return list of medical staff at that hospital
+     */
+    public List<MedicalStaff> getMedicalStaffByHospital(Hospital hospital) {
+        List<MedicalStaff> result = new ArrayList<>();
+        for (MedicalStaff s : medicalStaffList)
+            if (s.getHospital().equals(hospital)) result.add(s);
+        return result;
+    }
+
+    /**
+     * Returns all medical staff members registered in the system.
+     *
+     * @return list of all medical staff
+     */
+    public List<MedicalStaff> getAllMedicalStaff() {
+        return new ArrayList<>(medicalStaffList);
+    }
+
+    /**
+     * Finds a medical staff member by ID.
+     *
+     * @param id the staff ID
+     * @return the MedicalStaff, or null if not found
+     */
+    public MedicalStaff findMedicalStaffById(String id) {
+        for (MedicalStaff s : medicalStaffList)
+            if (s.getId().equals(id)) return s;
+        return null;
     }
 
     /**

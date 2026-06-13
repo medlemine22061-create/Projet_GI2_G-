@@ -22,7 +22,6 @@ import model.MedicalStaff;
 import model.Mission;
 import model.Position;
 import model.UserPoint;
-import model.enums.DroneStatus;
 import model.enums.PriorityLevel;
 import service.ImportExportService;
 import service.OptimizationService;
@@ -52,10 +51,10 @@ public class MainWindow extends BorderPane {
 
     // ── Styles ────────────────────────────────────────────────────────────────
     private static final String ROOT_STYLE =
-            "-fx-background-color: #2C2C2A;";
+            "-fx-background-color: #0A1428;";
     private static final String SIDEBAR_STYLE =
-            "-fx-background-color: #1E1E1C;"
-                    + " -fx-border-color: #3A3A38; -fx-border-width: 0 1 0 0;";
+            "-fx-background-color: #0D1E3A;"
+                    + " -fx-border-color: #1E3A6A; -fx-border-width: 0 1 0 0;";
 
 
     // ── Constructor ───────────────────────────────────────────────────────────
@@ -86,8 +85,8 @@ public class MainWindow extends BorderPane {
         HBox bar = new HBox();
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(10, 20, 10, 20));
-        bar.setStyle("-fx-background-color: #161614;"
-                + " -fx-border-color: #3A3A38; -fx-border-width: 0 0 1 0;");
+        bar.setStyle("-fx-background-color: #060F20;"
+                + " -fx-border-color: #1E3A6A; -fx-border-width: 0 0 1 0;");
 
         Label cross = new Label("✚");
         cross.setStyle("-fx-text-fill: #1ED882; -fx-font-size: 18px;");
@@ -108,15 +107,23 @@ public class MainWindow extends BorderPane {
 
         // Medical Sites
         p.getChildren().add(section("MEDICAL SITES"));
-        p.getChildren().add(btn("＋  Add Hospital",          "#1ED882", e -> addHospital()));
-        p.getChildren().add(btn("＋  Add Collection Center", "#FFA030", e -> addCenter()));
-        p.getChildren().add(btn("✕  Remove Site",            "#FF5050", e -> removeSite()));
-        p.getChildren().add(btn("↔  Move Site",              "#50C0FF", e -> moveSite()));
+        p.getChildren().add(btn("+  Add Hospital",           "#1ED882", e -> addHospital()));
+        p.getChildren().add(btn("+  Add Random Hospitals",   "#1ED882", e -> addRandomHospitals()));
+        p.getChildren().add(btn("+  Add Collection Center",  "#FFA030", e -> addCenter()));
+        p.getChildren().add(btn("x  Remove Site",            "#FF5050", e -> removeSite()));
+        p.getChildren().add(btn("<> Move Site",              "#50C0FF", e -> moveSite()));
+        p.getChildren().add(sep());
+
+        p.getChildren().add(section("DOCTORS  (User Points)"));
+        p.getChildren().add(btn("+   Add Doctor to Hospital", "#C864FF", e -> addDoctor()));
+        p.getChildren().add(btn("x   Remove Doctor",          "#FF5050", e -> removeDoctor()));
+        p.getChildren().add(btn("    List Doctors",           "#50C0FF", e -> listDoctors()));
         p.getChildren().add(sep());
 
         p.getChildren().add(section("DRONE BASES"));
-        p.getChildren().add(btn("＋  Add Drone Base",        "#8C64FF", e -> addDroneBase()));
-        p.getChildren().add(btn("＋  Add Drone to Base",     "#8C64FF", e -> addDroneToBase()));
+        p.getChildren().add(btn("+  Add Drone Base",         "#8C64FF", e -> addDroneBase()));
+        p.getChildren().add(btn("+  Add Drone to Base",      "#8C64FF", e -> addDroneToBase()));
+        p.getChildren().add(btn("x  Remove Drone Base",      "#FF5050", e -> removeDroneBase()));
         p.getChildren().add(sep());
 
         // Map Data
@@ -156,10 +163,10 @@ public class MainWindow extends BorderPane {
         b.setMaxWidth(Double.MAX_VALUE);
         b.setAlignment(Pos.CENTER_LEFT);
         b.setPadding(new Insets(7, 10, 7, 10));
-        String base = "-fx-background-color:#252523; -fx-text-fill:" + hex
+        String base = "-fx-background-color:#122040; -fx-text-fill:" + hex
                 + "; -fx-font-family:'Monospace'; -fx-font-size:11px;"
                 + " -fx-background-radius:5; -fx-cursor:hand;";
-        String hover = "-fx-background-color:#3A3A38; -fx-text-fill:" + hex
+        String hover = "-fx-background-color:#1E3A6A; -fx-text-fill:" + hex
                 + "; -fx-font-family:'Monospace'; -fx-font-size:11px;"
                 + " -fx-background-radius:5; -fx-cursor:hand;";
         b.setStyle(base);
@@ -187,27 +194,59 @@ public class MainWindow extends BorderPane {
 
     private void addHospital() {
         try {
-            String id      = ask("Hospital ID  (e.g. H3)");
-            String name    = ask("Hospital name");
-            double x       = askD("X coordinate  (0-850)");
-            double y       = askD("Y coordinate  (0-620)");
-            int numDoctors = (int) askD("Number of doctors responsible for deliveries");
+            String id   = ask("Hospital ID  (e.g. H3)");
+            String name = ask("Hospital name");
+            double x    = askD("X coordinate  (0-850)");
+            double y    = askD("Y coordinate  (0-620)");
 
             model.Hospital newHospital = new model.Hospital(id, name, new Position(x, y), true);
             mapModel.addMedicalSite(newHospital);
 
-            // Register hospital as UserPoint (numDoctors = number of user points)
-            // Each doctor is a potential requester -> add N user points for this hospital
-            for (int i = 0; i < numDoctors; i++) {
-                UserPoint up = new UserPoint("U-" + id + "-D" + (i+1), new Position(x, y));
-                mapModel.addUserPoint(up);
-            }
             String nearest = mapModel.getVoronoiDiagram().getNearestSite(new Position(x, y)) != null
                     ? mapModel.getVoronoiDiagram().getNearestSite(new Position(x, y)).getName()
-                    : "none";
+                    : "none (add a collection center first)";
             refresh("+ Hospital added: " + name
-                    + "\n  Doctors registered: " + numDoctors
-                    + "\n  Nearest collection center: " + nearest);
+                    + "\n  Use 'Add Doctor to Hospital' to register doctors.");
+        } catch (Exception e) { err(e.getMessage()); }
+    }
+
+    /**
+     * Adds N hospitals at random positions on the map.
+     * Each hospital gets a default doctor automatically.
+     */
+    private void addRandomHospitals() {
+        try {
+            int count = (int) askD("Number of random hospitals to add (e.g. 3)");
+            if (count <= 0) { err("Please enter a positive number."); return; }
+
+            java.util.Random rand = new java.util.Random();
+            int added = 0;
+
+            for (int i = 0; i < count; i++) {
+                double x    = 50 + rand.nextDouble() * 800;   // 50..850
+                double y    = 50 + rand.nextDouble() * 580;   // 50..630
+                String id   = "H-R" + (i + 1) + "-" + System.currentTimeMillis() % 1000;
+                String name = "Hospital Rand-" + (i + 1);
+
+                model.Hospital h = new model.Hospital(id, name, new Position(x, y), true);
+                mapModel.addMedicalSite(h);
+
+                // Add a default doctor for this hospital
+                MedicalStaff doc = new MedicalStaff(
+                        "DR-" + id, "Doctor", "Rand" + (i + 1),
+                        "Surgeon", "doc" + i + "@rand.fr", "0600000000", h
+                );
+                mapModel.addMedicalStaff(doc);
+                added++;
+            }
+
+            mapCanvas.draw();
+            mapCanvas.showStats(
+                    "-- RANDOM HOSPITALS ADDED --\n"
+                            + "  Count   : " + added + "\n"
+                            + "  Each hospital has 1 default doctor.\n"
+                            + "  Use 'Add Doctor to Hospital' to add more."
+            );
         } catch (Exception e) { err(e.getMessage()); }
     }
 
@@ -247,6 +286,63 @@ public class MainWindow extends BorderPane {
             refresh("↔  Site moved: " + site.getName()
                     + " → (" + (int)x + ", " + (int)y + ")");
         } catch (Exception e) { err(e.getMessage()); }
+    }
+
+    /**
+     * Removes a drone base and all its drones from the map.
+     * Shows an error if no base exists or if a drone from this base
+     * is currently in an active mission.
+     */
+    private void removeDroneBase() {
+        if (mapModel.getDroneBases().isEmpty()) {
+            err("No drone base on the map."); return;
+        }
+
+        try {
+            // Show available bases
+            StringBuilder list = new StringBuilder("Available bases:\n");
+            for (model.DroneBase b : mapModel.getDroneBases()) {
+                list.append("  [").append(b.getId()).append("]  ")
+                        .append(b.getName())
+                        .append("  (").append(b.getDrones().size()).append(" drones)\n");
+            }
+            mapCanvas.showStats(list.toString());
+
+            String id = ask("Base ID to remove");
+            model.DroneBase base = null;
+            for (model.DroneBase b : mapModel.getDroneBases())
+                if (b.getId().equalsIgnoreCase(id)) { base = b; break; }
+
+            if (base == null) {
+                mapCanvas.closeStats();
+                err("No base found with ID: " + id); return;
+            }
+
+            // Check if a drone from this base is in a mission
+            if (currentMission != null) {
+                for (model.Drone d : base.getDrones()) {
+                    if (d.equals(currentMission.getDrone())) {
+                        mapCanvas.closeStats();
+                        err("Cannot remove base [" + base.getName()
+                                + "]: one of its drones is currently in a mission.\n"
+                                + "Cancel the mission first.");
+                        return;
+                    }
+                }
+            }
+
+            // Remove all drones from model then remove base
+            for (model.Drone d : new java.util.ArrayList<>(base.getDrones())) {
+                mapModel.removeDrone(d);
+            }
+            mapModel.removeDroneBase(base);
+
+            mapCanvas.closeStats();
+            mapCanvas.draw();
+            mapCanvas.showStats("x  Drone base removed: " + base.getName()
+                    + "\n   All its drones were removed too.");
+
+        } catch (Exception e) { mapCanvas.closeStats(); err(e.getMessage()); }
     }
 
     /**
@@ -402,6 +498,126 @@ public class MainWindow extends BorderPane {
         } catch (Exception e) { err(e.getMessage()); }
     }
 
+    /**
+     * Adds a doctor (MedicalStaff) to an existing hospital.
+     * The doctor is automatically registered as a UserPoint
+     * at the hospital position, counted in Voronoi statistics.
+     */
+    private void addDoctor() {
+        try {
+            if (mapModel.getHospitals().isEmpty()) {
+                err("No hospital on the map. Add a hospital first."); return;
+            }
+
+            // Show hospitals
+            StringBuilder hList = new StringBuilder("Available hospitals:\n");
+            for (Hospital h : mapModel.getHospitals()) {
+                int count = mapModel.getMedicalStaffByHospital(h).size();
+                hList.append("  [").append(h.getId()).append("]  ")
+                        .append(h.getName()).append("  (").append(count).append(" doctor(s))\n");
+            }
+            mapCanvas.showStats(hList.toString());
+
+            String hospId = ask("Hospital ID");
+            Hospital hospital = findHospital(hospId);
+            if (hospital == null) {
+                mapCanvas.closeStats();
+                err("Hospital not found: " + hospId); return;
+            }
+
+            // Doctor info — no email required
+            String docId     = ask("Doctor ID  (e.g. DR1)");
+            String firstName = ask("First name");
+            String lastName  = ask("Last name");
+            String role      = ask("Role  (e.g. Surgeon, Cardiologist)");
+
+            MedicalStaff doctor = new MedicalStaff(
+                    docId, firstName, lastName, role,
+                    docId.toLowerCase() + "@medadrone.fr",  // default email
+                    "",                                      // phone optional
+                    hospital);
+
+            // Check ID uniqueness
+            if (mapModel.findMedicalStaffById(docId) != null) {
+                mapCanvas.closeStats();
+                err("A doctor with ID [" + docId + "] already exists.\nPlease use a different ID."); return;
+            }
+
+            mapModel.addMedicalStaff(doctor);
+            mapCanvas.closeStats();
+            mapCanvas.draw();
+            mapCanvas.showStats(
+                    "-- DOCTOR ADDED --\n"
+                            + "  ID       : " + docId + "\n"
+                            + "  Name     : " + firstName + " " + lastName + "\n"
+                            + "  Role     : " + role + "\n"
+                            + "  Hospital : " + hospital.getName() + "\n"
+                            + "  UserPt   : DOC-" + docId + "\n"
+                            + "  Zone     : " + hospital.getName()
+            );
+        } catch (Exception e) { mapCanvas.closeStats(); err(e.getMessage()); }
+    }
+
+    /**
+     * Removes a doctor (MedicalStaff) and their associated UserPoint.
+     */
+    private void removeDoctor() {
+        try {
+            if (mapModel.getAllMedicalStaff().isEmpty()) {
+                err("No doctor registered yet. Use 'Add Doctor to Hospital' first."); return;
+            }
+
+            StringBuilder list = new StringBuilder("Registered doctors:\n");
+            for (MedicalStaff s : mapModel.getAllMedicalStaff()) {
+                list.append("  ").append(s.getFullName())
+                        .append("  (").append(s.getRole()).append(")")
+                        .append("  @ ").append(s.getHospital().getName())
+                        .append("\n");
+            }
+            mapCanvas.showStats(list.toString());
+
+            String id = ask("Doctor ID to remove");
+            MedicalStaff doctor = mapModel.findMedicalStaffById(id);
+            if (doctor == null) {
+                mapCanvas.closeStats();
+                err("No doctor found with ID: " + id); return;
+            }
+
+            mapModel.removeMedicalStaff(doctor);
+            mapCanvas.closeStats();
+            mapCanvas.draw();
+            mapCanvas.showStats("x Doctor removed: " + doctor.getFullName()
+                    + "\n  UserPoint DOC-" + doctor.getFullName() + " also removed.");
+        } catch (Exception e) { mapCanvas.closeStats(); err(e.getMessage()); }
+    }
+
+    /**
+     * Displays all registered doctors grouped by hospital.
+     */
+    private void listDoctors() {
+        if (mapModel.getAllMedicalStaff().isEmpty()) {
+            err("No doctor registered. Use 'Add Doctor to Hospital'."); return;
+        }
+
+        StringBuilder sb = new StringBuilder("-- DOCTORS PER HOSPITAL --\n");
+        for (Hospital h : mapModel.getHospitals()) {
+            java.util.List<MedicalStaff> doctors = mapModel.getMedicalStaffByHospital(h);
+            sb.append("\n  ").append(h.getName())
+                    .append("  (").append(doctors.size()).append(" doctor(s))\n");
+            if (doctors.isEmpty()) {
+                sb.append("    -- none --\n");
+            } else {
+                for (MedicalStaff d : doctors) {
+                    sb.append("    ").append(d.getFullName())
+                            .append("  [").append(d.getRole()).append("]")
+                            .append("  ").append(d.getEmail()).append("\n");
+                }
+            }
+        }
+        sb.append("\nTotal doctors: ").append(mapModel.getAllMedicalStaff().size());
+        mapCanvas.showStats(sb.toString());
+    }
+
     private void importCsv() {
         try {
             String path = ask("CSV file path  (e.g. sites.csv)");
@@ -510,13 +726,13 @@ public class MainWindow extends BorderPane {
         }
 
         // ── Doctors par hopital ───────────────────────────────────────────────
-        sb.append("\n── DOCTORS PER HOSPITAL ───────────────\n");
+        sb.append("\n-- DOCTORS PER HOSPITAL ---------------\n");
         for (Hospital h : mapModel.getHospitals()) {
-            long doctorCount = mapModel.getUserPoints().stream()
-                    .filter(up -> up.getId().startsWith("U-" + h.getId() + "-D"))
-                    .count();
-            sb.append(String.format("  %-18s  doctors: %d\n",
-                    h.getName(), doctorCount));
+            java.util.List<MedicalStaff> docs = mapModel.getMedicalStaffByHospital(h);
+            sb.append(String.format("  %-18s  doctors: %d\n", h.getName(), docs.size()));
+            for (MedicalStaff d : docs)
+                sb.append(String.format("    -> %s  [%s]\n",
+                        d.getFullName(), d.getRole()));
         }
 
         mapCanvas.showStats(sb.toString());
@@ -636,7 +852,14 @@ public class MainWindow extends BorderPane {
 
             boolean adjacent = optimizationService.areDelaunayNeighbours(center, hospital);
 
-            DeliveryRequest request = defaultDoctor.createDeliveryRequest(
+            // Find a doctor at this hospital to issue the request
+            java.util.List<MedicalStaff> hospitalDoctors =
+                    mapModel.getMedicalStaffByHospital(hospital);
+            MedicalStaff requestingDoctor = hospitalDoctors.isEmpty()
+                    ? defaultDoctor   // fallback to default
+                    : hospitalDoctors.get(0);
+
+            DeliveryRequest request = requestingDoctor.createDeliveryRequest(
                     center, hospital, organ, PriorityLevel.CRITICAL
             );
 
@@ -645,15 +868,17 @@ public class MainWindow extends BorderPane {
 
             mapCanvas.showStats(String.format(
                     "=== MISSION CREATED ===========================\n"
-                            + "  Hospital   : [%s] %s\n"
-                            + "  Center     : [%s] %s  (auto-selected, %.1f units)\n"
-                            + "  Organ      : %s\n"
+                            + "  Requesting doctor : %s (%s)\n"
+                            + "  Hospital          : [%s] %s\n"
+                            + "  Center (auto)     : [%s] %s  (%.1f units)\n"
+                            + "  Organ             : %s\n"
                             + "\n  Optimal base  : %s  (score=%.1f)\n"
                             + "  Drone         : %s  (battery: %d%%)\n"
                             + "  Delaunay adj  : %s\n"
                             + "  Route dist    : %.1f units\n"
                             + "==============================================\n"
                             + "  Click Launch & Animate to start the mission.",
+                    requestingDoctor.getFullName(), requestingDoctor.getRole(),
                     hospital.getId(), hospital.getName(),
                     center.getId(),   center.getName(), minDist,
                     organ,
@@ -673,55 +898,76 @@ public class MainWindow extends BorderPane {
         log("▶   Mission launched — drone is flying…  (watch the map)");
     }
 
+    /**
+     * Tracks the current mission in real time.
+     * Reads the drone's actual position from the canvas animation,
+     * computes battery consumption based on progress,
+     * and marks the mission as DELIVERED when the drone arrives.
+     */
     private void trackMission() {
-        if (currentMission == null) { err("No current mission."); return; }
+        if (currentMission == null) { err("No active mission."); return; }
 
-        Position pos = currentMission.getCurrentPosition();
-        double   bat = currentMission.getBatteryLevel();
+        // Get live position from drone (updated by animation in MapCanvas)
+        Position pos     = currentMission.getDrone().getPosition();
+        double   progress = mapCanvas.getAnimProgress();
+        double   totalDist = currentMission.getRoute().computeDistance();
 
-        // Simulate battery consumption based on distance travelled
-        double totalDist = currentMission.getRoute().computeDistance();
-        double drone_speed = currentMission.getDrone().getAutonomy();
-        double batteryConsumed = totalDist > 0 && drone_speed > 0
-                ? (totalDist / drone_speed) * 100.0 : 0;
-        double currentBattery = Math.max(0, bat - batteryConsumed);
+        // Battery decreases proportionally to progress
+        double initialBattery = currentMission.getBatteryLevel();
+        double consumed       = initialBattery * 0.6 * progress; // max 60% used
+        double currentBattery = Math.max(0, initialBattery - consumed);
 
-        // Battery bar visual (10 blocks)
+        // Update mission tracking data
+        currentMission.updateTracking(pos, currentBattery, 4.0, 0.1);
+
+        // If animation finished → mission complete
+        if (!mapCanvas.isAnimating() && progress >= 1.0) {
+            currentMission.complete();
+            currentMission.getRequest().getDestination().receiveMission(currentMission);
+            defaultDoctor.validateReception(currentMission);
+        }
+
+        // Battery bar (10 blocks)
         int filled = (int)(currentBattery / 10);
-        StringBuilder bar = new StringBuilder("  [");
+        StringBuilder bar = new StringBuilder("[");
         for (int i = 0; i < 10; i++) bar.append(i < filled ? "█" : "░");
         bar.append("]  ").append(String.format("%.0f%%", currentBattery));
 
-        String batteryStatus = currentBattery > 60 ? "GOOD"
-                : currentBattery > 30 ? "LOW"
-                : "CRITICAL";
+        String batStatus = currentBattery > 60 ? "GOOD"
+                : currentBattery > 30 ? "LOW" : "CRITICAL";
+
+        String statusLine = progress >= 1.0
+                ? "DELIVERED ✔"
+                : (mapCanvas.isAnimating() ? "IN FLIGHT" : "WAITING");
 
         mapCanvas.showStats(String.format(
-                "── MISSION TRACKING ──────────────────\n"
-                        + "  Mission ID  : %s\n"
-                        + "  Status      : %s\n"
-                        + "  Drone       : %s\n"
-                        + "\n── LIVE POSITION ──────────────────────\n"
+                "-- MISSION TRACKING ------------------\n"
+                        + "  ID       : %s\n"
+                        + "  Status   : %s\n"
+                        + "  Drone    : %s\n"
+                        + "\n-- LIVE POSITION ---------------------\n"
                         + "  X = %.1f   Y = %.1f\n"
-                        + "\n── BATTERY ────────────────────────────\n"
-                        + "%s\n"
-                        + "  Status      : %s\n"
-                        + "\n── MISSION INFO ───────────────────────\n"
-                        + "  Route dist  : %.1f units\n"
-                        + "  Reception   : %s",
+                        + "  Progress : %.0f%%\n"
+                        + "\n-- BATTERY ---------------------------\n"
+                        + "  %s\n"
+                        + "  Status   : %s\n"
+                        + "\n-- ROUTE INFO ------------------------\n"
+                        + "  Distance : %.1f units\n"
+                        + "  From     : %s\n"
+                        + "  To       : %s",
                 currentMission.getId(),
-                currentMission.getStatus(),
+                statusLine,
                 currentMission.getDrone().getId(),
                 pos != null ? pos.getX() : 0,
                 pos != null ? pos.getY() : 0,
+                progress * 100,
                 bar.toString(),
-                batteryStatus,
+                batStatus,
                 totalDist,
-                currentMission.isReceptionConfirmed() ? "Confirmed ✔" : "Pending"
+                currentMission.getRoute().getOrigin().getName(),
+                currentMission.getRoute().getDestination().getName()
         ));
     }
-
-    // completeMission() removed from UI — drone completes automatically after animation
 
     private void cancelMission() {
         if (currentMission == null) { err("No current mission."); return; }

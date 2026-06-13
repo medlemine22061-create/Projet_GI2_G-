@@ -21,16 +21,32 @@ public class Route implements Serializable {
         this.waypoints = new ArrayList<>();
     }
 
+    /**
+     * Adds an intermediate waypoint to the route.
+     *
+     * @param position waypoint position
+     */
     public void addWaypoint(Position position) {
         if (position != null) {
             waypoints.add(position);
         }
     }
 
+    /**
+     * Removes a waypoint from the route.
+     *
+     * @param position waypoint to remove
+     */
     public void removeWaypoint(Position position) {
         waypoints.remove(position);
     }
 
+    /**
+     * Computes the total route distance in canvas units.
+     * Sums distances: origin -&gt; waypoints -&gt; destination.
+     *
+     * @return total distance
+     */
     public double computeDistance() {
         double distance = 0.0;
 
@@ -46,6 +62,12 @@ public class Route implements Serializable {
         return distance;
     }
 
+    /**
+     * Estimates the flight time based on drone speed.
+     *
+     * @param drone the drone that will fly this route
+     * @return estimated time in hours
+     */
     public double estimateTime(Drone drone) {
         if (drone == null || drone.getSpeed() <= 0) {
             return 0.0;

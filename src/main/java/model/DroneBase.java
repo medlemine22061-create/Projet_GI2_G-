@@ -36,6 +36,12 @@ public class DroneBase implements Serializable {
         this.drones = new ArrayList<>();
     }
 
+    /**
+     * Adds a drone to this base.
+     *
+     * @param drone drone to add
+     * @throws IllegalStateException if the base is full
+     */
     public void addDrone(Drone drone) {
         Objects.requireNonNull(drone, "drone cannot be null");
 
@@ -46,10 +52,20 @@ public class DroneBase implements Serializable {
         drones.add(drone);
     }
 
+    /**
+     * Removes a drone from this base.
+     *
+     * @param drone drone to remove
+     */
     public void removeDrone(Drone drone) {
         drones.remove(drone);
     }
 
+    /**
+     * Returns all drones in this base that are available for a mission.
+     *
+     * @return list of available drones
+     */
     public List<Drone> getAvailableDrones() {
         List<Drone> result = new ArrayList<>();
 
@@ -78,10 +94,20 @@ public class DroneBase implements Serializable {
         return capacity;
     }
 
+    /**
+     * Returns all drones registered in this base.
+     *
+     * @return list of all drones
+     */
     public List<Drone> getDrones() {
         return new ArrayList<>(drones);
     }
 
+    /**
+     * Updates the current position of the drone.
+     *
+     * @param position new position
+     */
     public void updatePosition(Position position) {
         this.position = Objects.requireNonNull(position, "position cannot be null");
     }
