@@ -3,7 +3,7 @@
 CY TECH — ING1-GI — 2025-2026
 
 Équipe : Ahmed Jeddou Mohamed Lemine · Abdy Yousef · Boukah Boukah
-Tutrice : Souhila Arib
+
 Dépôt  : https://github.com/medlemine22061-create/Projet_GI2_G-
 
 ---
